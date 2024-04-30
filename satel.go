@@ -51,49 +51,49 @@ func NewConfig(conn net.Conn, userCode string, h Handler) *Satel {
 func (s *Satel) ArmPartition(mode, index int) error {
 	data := make([]byte, 4)
 	data[index/8] = 1 << (index % 8)
-	bytes := prepareCommand(s.userCode, byte(0x80+mode), data...)
+	bytes := prepareCommand(byte(0x80+mode), s.userCode, data...)
 	return s.sendCmd(bytes)
 }
 
 func (s *Satel) ForceArmPartition(mode, index int) error {
 	data := make([]byte, 4)
 	data[index/8] = 1 << (index % 8)
-	bytes := prepareCommand(s.userCode, byte(0xA0+mode), data...)
+	bytes := prepareCommand(byte(0xA0+mode), s.userCode, data...)
 	return s.sendCmd(bytes)
 }
 
 func (s *Satel) DisarmPartition(index int) error {
 	data := make([]byte, 4)
 	data[index/8] = 1 << (index % 8)
-	bytes := prepareCommand(s.userCode, byte(0x84), data...)
+	bytes := prepareCommand(byte(0x84), s.userCode, data...)
 	return s.sendCmd(bytes)
 }
 
 func (s *Satel) ClearAlarm(index int) error {
 	data := make([]byte, 4)
 	data[index/8] = 1 << (byte(index) % 8)
-	bytes := prepareCommand(s.userCode, byte(0x85), data...)
+	bytes := prepareCommand(byte(0x85), s.userCode, data...)
 	return s.sendCmd(bytes)
 }
 
 func (s *Satel) AlarmCheck(index int) error {
 	data := make([]byte, 4)
 	data[index/8] = 1 << (byte(index) % 8)
-	bytes := prepareCommand(s.userCode, byte(0x13), data...)
+	bytes := prepareCommand(byte(0x13), s.userCode, data...)
 	return s.sendCmd(bytes)
 }
 
 func (s *Satel) ZoneBypass(zone int) error {
 	data := make([]byte, s.cmdSize)
 	data[zone/8] = 1 << (byte(zone) % 8)
-	bytes := prepareCommand(s.userCode, byte(0x86), data...)
+	bytes := prepareCommand(byte(0x86), s.userCode, data...)
 	return s.sendCmd(bytes)
 }
 
 func (s *Satel) ZoneUnBypass(zone int) error {
 	data := make([]byte, s.cmdSize)
 	data[zone/8] = 1 << (byte(zone) % 8)
-	bytes := prepareCommand(s.userCode, byte(0x87), data...)
+	bytes := prepareCommand(byte(0x87), s.userCode, data...)
 	return s.sendCmd(bytes)
 }
 
@@ -104,12 +104,12 @@ func (s *Satel) SetOutput(index int, value bool) error {
 	}
 	data := make([]byte, s.cmdSize)
 	data[index/8] = 1 << (index % 8)
-	bytes := prepareCommand(s.userCode, cmd, data...)
+	bytes := prepareCommand(cmd, s.userCode, data...)
 	return s.sendCmd(bytes)
 }
 
-func prepareCommand(code string, cmd byte, data ...byte) []byte {
-	bytes := append([]byte{cmd}, transformCode(code)...)
+func prepareCommand(cmd byte, userCode string, data ...byte) []byte {
+	bytes := append([]byte{cmd}, transformCode(userCode)...)
 	return append(bytes, data...)
 }
 
