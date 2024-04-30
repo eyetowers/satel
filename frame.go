@@ -48,3 +48,15 @@ func appendWithSpecialByte(buf []byte, data ...byte) []byte {
 	}
 	return buf
 }
+
+func isCrcValid(data []byte, targetCrc []byte) bool {
+	validCrc := crc(data)
+
+	for i := range targetCrc {
+		if validCrc[i] != targetCrc[i] {
+			return false
+		}
+	}
+
+	return true
+}

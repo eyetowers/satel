@@ -6,14 +6,16 @@ import (
 )
 
 var firstbytes = true
+
 var ErrBusy = errors.New("busy connection")
 
 // scan finds the actual response removing command prefix and postfix
 func scan(data []byte, _ bool) (advance int, token []byte, err error) {
 	if firstbytes {
 		firstbytes = false
-		IsBusy(data...)
-		return 0, nil, ErrBusy
+		if IsBusy(data...) {
+			return 0, nil, ErrBusy
+		}
 	}
 
 	i := 0

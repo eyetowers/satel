@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+var ErrCrcNotMatch = errors.New("corrupt response: crc does not match")
+
 type Satel struct {
 	conn     net.Conn
 	userCode string
@@ -141,6 +143,16 @@ func (s *Satel) read() {
 
 		bytes := scanner.Bytes()
 		cmd := bytes[0]
+
+		if cmd == 0xFE {
+			// cmd cannot be 0xFE
+			continue
+		}
+
+		if !isCrcValid(bytes[:len(bytes)-2], bytes[len(bytes)-2:]) {
+			s.Handler.OnError(ErrCrcNotMatch)
+		}
+
 		bytes = bytes[1 : len(bytes)-2]
 		s.cmdRes()
 		if cmd == 0xEF {
