@@ -40,6 +40,7 @@ type Handler interface {
 	OnTroubleMemoryPart5(index int, state bool)
 	OnPartitionWithViolatedZones(index int, state bool)
 	OnZoneIsolate(index int, state bool)
+	OnError(err error)
 }
 
 func handlerFunc(h Handler, cmd ChangeType) func(int, bool) {

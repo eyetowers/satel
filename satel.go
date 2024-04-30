@@ -114,7 +114,9 @@ func prepareCommand(code string, cmd byte, data ...byte) []byte {
 }
 
 func (s *Satel) Close() error {
+
 	return s.conn.Close()
+
 }
 
 type command struct {
@@ -126,8 +128,17 @@ func (s *Satel) read() {
 	scanner := bufio.NewScanner(s.conn)
 	scanner.Split(scan)
 	commands := make(map[byte]command)
+	defer s.Close()
 
-	for ok := scanner.Scan(); ok; ok = scanner.Scan() {
+	for {
+		ok := scanner.Scan()
+		if !ok {
+			if scanner.Err() == ErrBusy {
+				s.Handler.OnError(ErrBusy)
+			}
+			break
+		}
+
 		bytes := scanner.Bytes()
 		cmd := bytes[0]
 		bytes = bytes[1 : len(bytes)-2]
@@ -151,7 +162,6 @@ func (s *Satel) read() {
 		c.initialized = true
 		commands[cmd] = c
 	}
-	_ = s.conn.Close()
 }
 
 func (s *Satel) cmdRes() {
