@@ -22,24 +22,29 @@ const (
 
 func (r Result) String() string {
 	if r >= 0x80 && r <= 0x8F {
-		return fmt.Sprintf("Other errors 0x%02X", byte(r))
+		return fmt.Sprintf("other errors 0x%02X", byte(r))
 	}
 
 	strings := map[Result]string{
-		Ok:                        "OK",
-		ReqUserCodeNotFound:       "Requesting user code not found",
-		NoAccess:                  "No access",
-		SelectedUserNotExist:      "Selected user does not exist",
-		SelectedUserAlreadyExists: "Selected user already exists",
-		WrongOrDuplicateCode:      "Wrong code or code already exists",
-		TelephoneCodeExists:       "Telephone code already exists",
-		ChangedCodeSame:           "Changed code is the same",
-		OtherError:                "Other error",
-		CannotArmButForceArm:      "Can not arm, but can use force arm",
-		CannotArm:                 "Can not arm",
-		OtherErrors:               "Other errors",
-		CommandAccepted:           "Command accepted (data length and CRC OK), will be processed",
+		Ok:                        "ok",
+		ReqUserCodeNotFound:       "requesting user code not found",
+		NoAccess:                  "no access",
+		SelectedUserNotExist:      "selected user does not exist",
+		SelectedUserAlreadyExists: "selected user already exists",
+		WrongOrDuplicateCode:      "wrong code or code already exists",
+		TelephoneCodeExists:       "telephone code already exists",
+		ChangedCodeSame:           "changed code is the same",
+		OtherError:                "other error",
+		CannotArmButForceArm:      "can not arm, but can use force arm",
+		CannotArm:                 "can not arm",
+		OtherErrors:               "other errors",
+		CommandAccepted:           "command accepted (data length and CRC OK), will be processed",
 	}
+
+	if strings[r] == "" {
+		return "invalid response code"
+	}
+
 	return strings[r]
 }
 

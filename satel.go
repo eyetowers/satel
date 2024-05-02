@@ -151,7 +151,6 @@ func (s *Satel) read() {
 		}
 
 		bytes = bytes[1 : len(bytes)-2]
-		s.unblockNextCmd()
 
 		if cmd == 0xFE {
 			// cmd cannot be 0xFE
@@ -159,7 +158,7 @@ func (s *Satel) read() {
 		}
 
 		if cmd == 0xEF {
-			s.resChan <- Result(bytes[0])
+			s.sendResponseStatus(bytes...)
 			continue
 		}
 
@@ -180,40 +179,29 @@ func (s *Satel) read() {
 	}
 }
 
-func (s *Satel) unblockNextCmd() {
+func (s *Satel) sendResponseStatus(r ...byte) {
 	select {
-	case s.cmdChan <- 0:
+	case s.resChan <- Result(r[0]):
 	default:
 	}
 }
 
-// waitToProceed blocks next command until a reponse is received or for 3 seconds
-func (s *Satel) waitToProceed() {
-	select {
-	case <-s.cmdChan:
-	case <-time.After(3 * time.Second):
-	}
-}
-
 func (s *Satel) cmdResponseStatus() error {
-	r, ok := <-s.resChan
-	if !ok {
-		return fmt.Errorf("failed to listen to command response")
+	select {
+	case r := <-s.resChan:
+		if r.IsError() {
+			return fmt.Errorf(r.String())
+		}
+		return nil
+	case <-time.After(3 * time.Second):
+		return fmt.Errorf("timeout (3 seconds), no response")
 	}
-
-	if r.IsError() {
-		return fmt.Errorf(r.String())
-	}
-
-	return nil
 }
 
-func (s *Satel) sendCmd(data []byte, readOnlyCmd ...bool) error {
-	if len(readOnlyCmd) > 1 {
-		return fmt.Errorf("only one boolean argument allowed")
-	}
-
+func (s *Satel) sendCmd(data []byte) error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.conn == nil {
 		return errors.New("no connection")
 	}
@@ -221,14 +209,6 @@ func (s *Satel) sendCmd(data []byte, readOnlyCmd ...bool) error {
 	if err != nil {
 		return err
 	}
-
-	s.waitToProceed()
-	s.mu.Unlock()
-
-	if len(readOnlyCmd) == 1 && readOnlyCmd[0] {
-		return nil
-	}
-
 	return s.cmdResponseStatus()
 }
 
