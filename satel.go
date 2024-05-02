@@ -120,9 +120,7 @@ func prepareCommand(cmd byte, userCode string, data ...byte) []byte {
 }
 
 func (s *Satel) Close() error {
-
 	return s.conn.Close()
-
 }
 
 type command struct {
@@ -148,21 +146,23 @@ func (s *Satel) read() {
 		bytes := scanner.Bytes()
 		cmd := bytes[0]
 
-		if cmd == 0xFE {
-			// cmd cannot be 0xFE
-			continue
-		}
-
 		if !isCrcValid(bytes[:len(bytes)-2], bytes[len(bytes)-2:]) {
 			s.Handler.OnError(ErrCrcNotMatch)
 		}
 
 		bytes = bytes[1 : len(bytes)-2]
-		s.cmdRes()
+		s.unblockNextCmd()
+
+		if cmd == 0xFE {
+			// cmd cannot be 0xFE
+			continue
+		}
+
 		if cmd == 0xEF {
 			s.resChan <- Result(bytes[0])
 			continue
 		}
+
 		c := commands[cmd]
 		for i, bb := range bytes {
 			change := bb ^ c.prev[i]
@@ -180,37 +180,22 @@ func (s *Satel) read() {
 	}
 }
 
-func (s *Satel) cmdRes() {
+func (s *Satel) unblockNextCmd() {
 	select {
 	case s.cmdChan <- 0:
 	default:
 	}
 }
 
-func (s *Satel) sendCmd(data []byte, readOnlyCmd ...bool) error {
-	if len(readOnlyCmd) > 1 {
-		return fmt.Errorf("only one boolean argument allowed")
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.conn == nil {
-		return errors.New("no connection")
-	}
-	_, err := s.conn.Write(frame(data...))
-	if err != nil {
-		return err
-	}
-
+// waitToProceed blocks next command until a reponse is received or for 3 seconds
+func (s *Satel) waitToProceed() {
 	select {
 	case <-s.cmdChan:
 	case <-time.After(3 * time.Second):
 	}
+}
 
-	if len(readOnlyCmd) > 0 && readOnlyCmd[0] {
-		return nil
-	}
-
+func (s *Satel) cmdResponseStatus() error {
 	r, ok := <-s.resChan
 	if !ok {
 		return fmt.Errorf("failed to listen to command response")
@@ -221,6 +206,30 @@ func (s *Satel) sendCmd(data []byte, readOnlyCmd ...bool) error {
 	}
 
 	return nil
+}
+
+func (s *Satel) sendCmd(data []byte, readOnlyCmd ...bool) error {
+	if len(readOnlyCmd) > 1 {
+		return fmt.Errorf("only one boolean argument allowed")
+	}
+
+	s.mu.Lock()
+	if s.conn == nil {
+		return errors.New("no connection")
+	}
+	_, err := s.conn.Write(frame(data...))
+	if err != nil {
+		return err
+	}
+
+	s.waitToProceed()
+	s.mu.Unlock()
+
+	if len(readOnlyCmd) == 1 && readOnlyCmd[0] {
+		return nil
+	}
+
+	return s.cmdResponseStatus()
 }
 
 func transformCode(code string) []byte {
