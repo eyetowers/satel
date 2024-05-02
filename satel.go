@@ -26,6 +26,10 @@ func New(address, userCode string, h Handler) (*Satel, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connection to %s failed with error: %w", address, err)
 	}
+
+	if !isUserCodeValid(userCode) {
+		return nil, fmt.Errorf("invalid user code")
+	}
 	return NewConfig(conn, userCode, h), nil
 }
 
