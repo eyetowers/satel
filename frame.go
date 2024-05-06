@@ -9,19 +9,18 @@ const (
 
 	reserveBytes int = 4
 	crcBytes     int = 2
-	cmdBytes     int = 1
 )
 
 func frame(data ...byte) []byte {
 	preamble := []byte{0xFE, 0xFE}
 	postamble := []byte{0xFE, 0x0D}
 
-	buf := make([]byte, 0, (cmdBytes + len(data) + crcBytes + cmdBytes + reserveBytes))
+	buf := make([]byte, 0, (len(preamble) + len(data) + crcBytes + len(postamble) + reserveBytes))
 	buf = append(buf, preamble...)
 	buf = appendWithSpecialByte(buf, data...)
 	buf = appendWithSpecialByte(buf, crc(data)...)
-
-	return append(buf, postamble...)
+	buf = append(buf, postamble...)
+	return buf
 
 }
 
