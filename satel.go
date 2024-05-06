@@ -9,14 +9,16 @@ import (
 	"time"
 )
 
+var ErrDisconnected = errors.New("disconnected")
 var ErrCrcNotMatch = errors.New("corrupt response: crc does not match")
+var ErrCurruptedResponse = errors.New("corrupted response: does not match the documentation")
 
 type Satel struct {
 	conn     net.Conn
 	userCode string
 	mu       sync.Mutex
 	cmdSize  int
-	cmdChan  chan int
+	readChan chan byte
 	resChan  chan Result
 	Handler  Handler
 }
@@ -37,7 +39,7 @@ func NewConfig(conn net.Conn, userCode string, h Handler) *Satel {
 	s := &Satel{
 		conn:     conn,
 		userCode: userCode,
-		cmdChan:  make(chan int),
+		readChan: make(chan byte),
 		resChan:  make(chan Result),
 		Handler:  h,
 		cmdSize:  16, // will have to change it later (Satel man, page 13)
@@ -45,13 +47,24 @@ func NewConfig(conn net.Conn, userCode string, h Handler) *Satel {
 
 	go s.read()
 
-	subscribedStates := []byte{0x7F, 0xFF, 0xFF, 0xFF, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	subscribedStates := []byte{0x7F, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 	err := s.sendCmd(subscribedStates)
 	if err != nil {
 		return s
 	}
 
+	go s.keepConnectionAlive()
 	return s
+}
+
+func (s *Satel) keepConnectionAlive() {
+	for {
+		err := s.sendReadCmd(0x7E)
+		if err != nil {
+			return
+		}
+		time.Sleep(5 * time.Second)
+	}
 }
 
 func (s *Satel) ArmPartition(mode, index int) error {
@@ -120,7 +133,28 @@ func prepareCommand(cmd byte, userCode string, data ...byte) []byte {
 }
 
 func (s *Satel) Close() error {
+	close(s.readChan)
+	close(s.resChan)
 	return s.conn.Close()
+}
+
+func decomposePayload(bytes ...byte) (byte, []byte, error) {
+	const minByteLength = 3
+	if len(bytes) < minByteLength {
+		return 0, nil, ErrCurruptedResponse
+	}
+	cmd := bytes[0]
+	dataWithCmd := bytes[:len(bytes)-2]
+	data := bytes[1 : len(bytes)-2]
+	crc := bytes[len(bytes)-2:]
+	if !isCrcValid(dataWithCmd, crc) {
+		return 0, nil, ErrCrcNotMatch
+	}
+
+	if cmd == 0xFE {
+		return 0, nil, ErrCurruptedResponse
+	}
+	return cmd, data, nil
 }
 
 type command struct {
@@ -137,33 +171,33 @@ func (s *Satel) read() {
 	for {
 		ok := scanner.Scan()
 		if !ok {
-			if scanner.Err() == ErrBusy {
-				s.Handler.OnError(ErrBusy)
+			if scanner.Err() == nil {
+				s.Handler.OnError(ErrDisconnected)
+			} else {
+				s.Handler.OnError(scanner.Err())
 			}
 			break
 		}
 
 		bytes := scanner.Bytes()
-		cmd := bytes[0]
-
-		if !isCrcValid(bytes[:len(bytes)-2], bytes[len(bytes)-2:]) {
-			s.Handler.OnError(ErrCrcNotMatch)
-		}
-
-		bytes = bytes[1 : len(bytes)-2]
-
-		if cmd == 0xFE {
-			// cmd cannot be 0xFE
-			continue
+		cmd, data, err := decomposePayload(bytes...)
+		if err != nil {
+			s.Handler.OnError(err)
+			break
 		}
 
 		if cmd == 0xEF {
-			s.sendResponseStatus(bytes...)
+			s.sendResponseStatus(data[0])
+			continue
+		}
+
+		if cmd == 0x7E {
+			s.sendVersionResponse(cmd)
 			continue
 		}
 
 		c := commands[cmd]
-		for i, bb := range bytes {
+		for i, bb := range data {
 			change := bb ^ c.prev[i]
 			for j := 0; j < 8; j++ {
 				index := byte(1 << j)
@@ -172,16 +206,23 @@ func (s *Satel) read() {
 					handleChange((i*8 + j), bb&index != 0)
 				}
 			}
-			c.prev[i] = bytes[i]
+			c.prev[i] = data[i]
 		}
 		c.initialized = true
 		commands[cmd] = c
 	}
 }
 
-func (s *Satel) sendResponseStatus(r ...byte) {
+func (s *Satel) sendVersionResponse(b byte) {
 	select {
-	case s.resChan <- Result(r[0]):
+	case s.readChan <- b:
+	default:
+	}
+}
+
+func (s *Satel) sendResponseStatus(r byte) {
+	select {
+	case s.resChan <- Result(r):
 	default:
 	}
 }
@@ -196,6 +237,26 @@ func (s *Satel) cmdResponseStatus() error {
 	case <-time.After(3 * time.Second):
 		return fmt.Errorf("timeout (3 seconds), no response")
 	}
+}
+
+func (s *Satel) sendReadCmd(data ...byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.conn == nil {
+		return errors.New("no connection")
+	}
+	_, err := s.conn.Write(frame(data...))
+	if err != nil {
+		return err
+	}
+
+	select {
+	case <-s.readChan:
+	case <-time.After(3 * time.Second):
+	}
+
+	return nil
 }
 
 func (s *Satel) sendCmd(data []byte) error {
