@@ -11,7 +11,7 @@ import (
 
 var ErrDisconnected = errors.New("disconnected")
 var ErrCrcNotMatch = errors.New("corrupt response: crc does not match")
-var ErrCurruptedResponse = errors.New("corrupted response: does not match the documentation")
+var ErrCorruptedResponse = errors.New("corrupted response: does not match the documentation")
 
 type Satel struct {
 	conn     net.Conn
@@ -141,7 +141,7 @@ func (s *Satel) Close() error {
 func decomposePayload(bytes ...byte) (byte, []byte, error) {
 	const minByteLength = 3
 	if len(bytes) < minByteLength {
-		return 0, nil, ErrCurruptedResponse
+		return 0, nil, ErrCorruptedResponse
 	}
 	cmd := bytes[0]
 	dataWithCmd := bytes[:len(bytes)-2]
@@ -152,7 +152,7 @@ func decomposePayload(bytes ...byte) (byte, []byte, error) {
 	}
 
 	if cmd == 0xFE {
-		return 0, nil, ErrCurruptedResponse
+		return 0, nil, ErrCorruptedResponse
 	}
 	return cmd, data, nil
 }
