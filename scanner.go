@@ -2,7 +2,6 @@ package satel
 
 import (
 	"bytes"
-	"fmt"
 )
 
 var (
@@ -17,16 +16,7 @@ func scan(data []byte, _ bool) (advance int, token []byte, err error) {
 		// No complete packet yet, wait for more bytes.
 		return 0, nil, nil
 	}
-
-	for _, d := range data {
-		fmt.Printf("0x%02X ", d)
-	}
-	println()
 	data = data[:end]
-
-	for _, d := range data {
-		fmt.Printf("0x%02X ", d)
-	}
 
 	start := bytes.LastIndex(data, preamble)
 	if start < 0 {

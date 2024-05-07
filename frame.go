@@ -14,11 +14,10 @@ const (
 func frame(data ...byte) []byte {
 	buf := make([]byte, 0, (len(preamble) + len(data) + crcBytes + len(postamble) + reserveBytes))
 	buf = append(buf, preamble...)
-	buf = appendWithSpecialByte(buf, data...)
-	buf = appendWithSpecialByte(buf, crc(data)...)
+	buf = escapeAppend(buf, data...)
+	buf = escapeAppend(buf, crc(data)...)
 	buf = append(buf, postamble...)
 	return buf
-
 }
 
 func crc(data []byte) []byte {
@@ -35,7 +34,7 @@ func update(c uint16, b byte) uint16 {
 	return c + c>>8 + uint16(b)
 }
 
-func appendWithSpecialByte(buf []byte, data ...byte) []byte {
+func escapeAppend(buf []byte, data ...byte) []byte {
 	for _, b := range data {
 		buf = append(buf, b)
 		if b == 0xFE {
