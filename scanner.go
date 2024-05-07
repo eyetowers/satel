@@ -11,7 +11,7 @@ var (
 
 // scan finds the actual response removing command prefix and postfix
 func scan(data []byte, _ bool) (advance int, token []byte, err error) {
-	end := bytes.Index(data, postamble)
+	end := findEnd(data)
 	if end < 0 {
 		// No complete packet yet, wait for more bytes.
 		return 0, nil, nil
@@ -30,6 +30,27 @@ func scan(data []byte, _ bool) (advance int, token []byte, err error) {
 		return 0, nil, err
 	}
 	return end + 2, payload, nil
+}
+
+func findEnd(data []byte) int {
+	i := 0
+	for {
+		found := bytes.Index(data[i:], postamble)
+		if found < 0 {
+			return -1
+		}
+		end := found + i
+		if end == 0 {
+			// Found at the begining, corrupt message.
+			return end + i
+		}
+		if data[end-1] != 0xFE {
+			// The previous byte is not 0xFE, so it is an actual match.
+			return end
+		}
+		// Skip and find next.
+		i += found + 2
+	}
 }
 
 func unescape(bytes []byte) ([]byte, error) {
