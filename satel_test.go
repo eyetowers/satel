@@ -97,7 +97,7 @@ func Test_Scan(t *testing.T) {
 	}
 }
 
-func Test_frame(t *testing.T) {
+func Test_Frame(t *testing.T) {
 	preamble := []byte{0xFE, 0xFE}
 	postamble := []byte{0xFE, 0x0D}
 
@@ -132,5 +132,46 @@ func Test_frame(t *testing.T) {
 			require.Equal(t, c.expect, result)
 		})
 	}
+}
 
+func Test_TransformCode(t *testing.T) {
+	cases := []struct {
+		input  string
+		expect []byte
+	}{
+		{
+			"0",
+			[]byte{0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
+		},
+		{
+			"0000",
+			[]byte{0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
+		},
+		{
+			"000",
+			[]byte{0x00, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
+		},
+		{
+			"123456",
+			[]byte{0x12, 0x34, 0x56, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
+		},
+		{
+			"98124",
+			[]byte{0x98, 0x12, 0x4F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
+		},
+		{
+			"12345678901234",
+			[]byte{0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0xFF},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.input, func(t *testing.T) {
+			// When.
+			result := transformCode(c.input)
+
+			// Then.
+			require.Equal(t, c.expect, result)
+		})
+	}
 }
