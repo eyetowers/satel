@@ -2,41 +2,37 @@ package satel
 
 import (
 	"bytes"
-	"fmt"
+)
+
+var (
+	preamble  = []byte{0xFE, 0xFE}
+	postamble = []byte{0xFE, 0x0D}
 )
 
 // scan finds the actual response removing command prefix and postfix
 func scan(data []byte, _ bool) (advance int, token []byte, err error) {
-	for _, d := range data {
-		fmt.Printf("0x%0X ", d)
+	end := bytes.Index(data, postamble)
+	if end < 0 {
+		// No complete packet yet, wait for more bytes.
+		return 0, nil, nil
 	}
-	println("EOL")
+	data = data[:end]
 
-	i := 0
-	for ; i < len(data) && data[i] == 0xFE; i++ {
+	start := bytes.LastIndex(data, preamble)
+	if start < 0 {
+		// Packet end without a preamble, fail reading.
+		return 0, nil, ErrCorruptedResponse
 	}
-	if i > 0 {
-		data = data[i:]
-	}
-	startIndex := bytes.Index(data, []byte{0xFE, 0xFE})
-	index := bytes.Index(data, []byte{0xFE, 0x0D})
-	if startIndex > 0 && (index < 0 || startIndex < index) {
-		return i + startIndex + 2, nil, nil
-	}
-	// fmt.Println(index)
-	if index > 0 {
-		filteredData, err := removeSpecialByte(data[:index])
-		if err != nil {
-			return 0, nil, err
-		}
+	data = data[start+2:]
 
-		return i + index + 2, filteredData, nil
+	payload, err := unescape(data)
+	if err != nil {
+		return 0, nil, err
 	}
-
-	return 0, nil, nil
+	return end + 2, payload, nil
 }
 
-func removeSpecialByte(bytes []byte) ([]byte, error) {
+func unescape(bytes []byte) ([]byte, error) {
 	i := 0
 	j := 0
 	for ; i < len(bytes); i++ {
