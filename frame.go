@@ -12,9 +12,6 @@ const (
 )
 
 func frame(data ...byte) []byte {
-	preamble := []byte{0xFE, 0xFE}
-	postamble := []byte{0xFE, 0x0D}
-
 	buf := make([]byte, 0, (len(preamble) + len(data) + crcBytes + len(postamble) + reserveBytes))
 	buf = append(buf, preamble...)
 	buf = appendWithSpecialByte(buf, data...)

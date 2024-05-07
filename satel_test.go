@@ -53,8 +53,8 @@ func Test_Scan(t *testing.T) {
 			expect: append([][]byte{}, []byte{0x01, 0xCD, 0xEF, 0x12, 0xFE, 0x78}, []byte{0x02, 0xFE, 0xFE}),
 		},
 		{
-			name:   "with spacial value 0xFE",
-			input:  appendBytes(preamble, []byte{0x01, 0xCD, 0xEF, 0x12, 0xFE, 0xF0, 0x78}, postamble, garbageBytes, garbageBytes, preamble, []byte{0x02, 0xFE, 0xF0, 0xFE, 0xF0}, postamble),
+			name:   "with spacial value 0xFE and start with garbage bytes",
+			input:  appendBytes(garbageBytes, garbageBytes, preamble, []byte{0x01, 0xCD, 0xEF, 0x12, 0xFE, 0xF0, 0x78}, postamble, garbageBytes, garbageBytes, preamble, []byte{0x02, 0xFE, 0xF0, 0xFE, 0xF0}, postamble),
 			expect: append([][]byte{}, []byte{0x01, 0xCD, 0xEF, 0x12, 0xFE, 0x78}, []byte{0x02, 0xFE, 0xFE}),
 		},
 		{
@@ -92,4 +92,21 @@ func Test_Scan(t *testing.T) {
 
 		})
 	}
+}
+
+func Test_frame(t *testing.T) {
+
+	cases := []struct {
+		input  []byte
+		expect []byte
+	}{
+		{},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+
+		})
+	}
+
 }
