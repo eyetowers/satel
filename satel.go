@@ -42,7 +42,7 @@ func NewConfig(conn net.Conn, userCode string, h Handler) *Satel {
 		readChan: make(chan byte),
 		resChan:  make(chan Result),
 		Handler:  h,
-		cmdSize:  16, // will have to change it later (Satel man, page 13)
+		cmdSize:  32, // will have to change it later (Satel man, page 13)
 	}
 
 	go s.read()
@@ -68,51 +68,37 @@ func (s *Satel) keepConnectionAlive() {
 }
 
 func (s *Satel) ArmPartition(mode, index int) error {
-	data := make([]byte, 4)
-	data[index/8] = 1 << (index % 8)
-	bytes := prepareCommand(byte(0x80+mode), s.userCode, data...)
+	bytes := s.prepareCommand(byte(0x80+mode), 4, index)
 	return s.sendCmd(bytes)
 }
 
 func (s *Satel) ForceArmPartition(mode, index int) error {
-	data := make([]byte, 4)
-	data[index/8] = 1 << (index % 8)
-	bytes := prepareCommand(byte(0xA0+mode), s.userCode, data...)
+	bytes := s.prepareCommand(byte(0xA0+mode), 4, index)
 	return s.sendCmd(bytes)
 }
 
 func (s *Satel) DisarmPartition(index int) error {
-	data := make([]byte, 4)
-	data[index/8] = 1 << (index % 8)
-	bytes := prepareCommand(byte(0x84), s.userCode, data...)
+	bytes := s.prepareCommand(byte(0x84), 4, index)
 	return s.sendCmd(bytes)
 }
 
 func (s *Satel) ClearAlarm(index int) error {
-	data := make([]byte, 4)
-	data[index/8] = 1 << (byte(index) % 8)
-	bytes := prepareCommand(byte(0x85), s.userCode, data...)
+	bytes := s.prepareCommand(byte(0x85), 4, index)
 	return s.sendCmd(bytes)
 }
 
 func (s *Satel) AlarmCheck(index int) error {
-	data := make([]byte, 4)
-	data[index/8] = 1 << (byte(index) % 8)
-	bytes := prepareCommand(byte(0x13), s.userCode, data...)
+	bytes := s.prepareCommand(byte(0x13), 4, index)
 	return s.sendCmd(bytes)
 }
 
 func (s *Satel) ZoneBypass(zone int) error {
-	data := make([]byte, s.cmdSize)
-	data[zone/8] = 1 << (byte(zone) % 8)
-	bytes := prepareCommand(byte(0x86), s.userCode, data...)
+	bytes := s.prepareCommand(byte(0x86), s.cmdSize, zone)
 	return s.sendCmd(bytes)
 }
 
 func (s *Satel) ZoneUnBypass(zone int) error {
-	data := make([]byte, s.cmdSize)
-	data[zone/8] = 1 << (byte(zone) % 8)
-	bytes := prepareCommand(byte(0x87), s.userCode, data...)
+	bytes := s.prepareCommand(byte(0x87), s.cmdSize, zone)
 	return s.sendCmd(bytes)
 }
 
@@ -121,14 +107,14 @@ func (s *Satel) SetOutput(index int, value bool) error {
 	if value {
 		cmd = 0x88
 	}
-	data := make([]byte, s.cmdSize)
-	data[index/8] = 1 << (index % 8)
-	bytes := prepareCommand(cmd, s.userCode, data...)
+	bytes := s.prepareCommand(cmd, s.cmdSize, index)
 	return s.sendCmd(bytes)
 }
 
-func prepareCommand(cmd byte, userCode string, data ...byte) []byte {
-	bytes := append([]byte{cmd}, transformCode(userCode)...)
+func (s *Satel) prepareCommand(cmd byte, cmdSize int, index int) []byte {
+	data := make([]byte, cmdSize)
+	data[index/8] = 1 << (index % 8)
+	bytes := append([]byte{cmd}, transformCode(s.userCode)...)
 	return append(bytes, data...)
 }
 
