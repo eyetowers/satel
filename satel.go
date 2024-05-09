@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -26,6 +27,8 @@ type Satel struct {
 	versionChan  chan []byte
 	responseChan chan Result
 	handler      Handler
+	closing      atomic.Bool
+	done         chan bool
 }
 
 func New(address, userCode string, h Handler) (*Satel, error) {
@@ -48,6 +51,7 @@ func newConfig(conn net.Conn, userCode string, h Handler) (*Satel, error) {
 		responseChan: make(chan Result),
 		handler:      h,
 		cmdSize:      16,
+		done:         make(chan bool),
 	}
 
 	go s.read()
@@ -138,9 +142,10 @@ func (s *Satel) prepareCommand(cmd byte, cmdSize int, index int) []byte {
 }
 
 func (s *Satel) Close() error {
-	close(s.versionChan)
-	close(s.responseChan)
-	return s.conn.Close()
+	s.closing.Store(true)
+	err := s.conn.Close()
+	<-s.done
+	return err
 }
 
 func decomposePayload(bytes ...byte) (byte, []byte, error) {
@@ -164,6 +169,19 @@ func decomposePayload(bytes ...byte) (byte, []byte, error) {
 	return cmd, data, nil
 }
 
+func (s *Satel) closeRead() {
+	close(s.versionChan)
+	close(s.responseChan)
+	s.conn.Close()
+	close(s.done)
+}
+
+func (s *Satel) reportError(err error) {
+	if !s.closing.Load() {
+		s.handler.OnError(err)
+	}
+}
+
 type command struct {
 	prev        [32]byte
 	initialized bool
@@ -173,15 +191,14 @@ func (s *Satel) read() {
 	scanner := bufio.NewScanner(s.conn)
 	scanner.Split(scan)
 	commands := make(map[byte]command)
-	defer s.conn.Close()
-
+	defer s.closeRead()
 	for {
 		ok := scanner.Scan()
 		if !ok {
 			if scanner.Err() == nil {
-				s.handler.OnError(ErrDisconnected)
+				s.reportError(ErrDisconnected)
 			} else {
-				s.handler.OnError(scanner.Err())
+				s.reportError(scanner.Err())
 			}
 			return
 		}
@@ -189,7 +206,7 @@ func (s *Satel) read() {
 		bytes := scanner.Bytes()
 		cmd, data, err := decomposePayload(bytes...)
 		if err != nil {
-			s.handler.OnError(err)
+			s.reportError(err)
 			break
 		}
 
@@ -210,7 +227,9 @@ func (s *Satel) read() {
 				index := byte(1 << j)
 				if !c.initialized || change&index != 0 {
 					handleChange := handlerFunc(s.handler, ChangeType(cmd))
-					handleChange((i*8 + j), bb&index != 0)
+					if !s.closing.Load() {
+						handleChange((i*8 + j), bb&index != 0)
+					}
 				}
 			}
 			c.prev[i] = data[i]
