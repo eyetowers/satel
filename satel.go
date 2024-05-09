@@ -42,7 +42,7 @@ func NewConfig(conn net.Conn, userCode string, h Handler) *Satel {
 		readChan: make(chan byte),
 		resChan:  make(chan Result),
 		Handler:  h,
-		cmdSize:  32, // will have to change it later (Satel man, page 13)
+		cmdSize:  16, // will have to change it later (Satel man, page 13)
 	}
 
 	go s.read()
@@ -108,6 +108,11 @@ func (s *Satel) SetOutput(index int, value bool) error {
 		cmd = 0x88
 	}
 	bytes := s.prepareCommand(cmd, s.cmdSize, index)
+	return s.sendCmd(bytes)
+}
+
+func (s *Satel) ClaerTroubleMemory() error {
+	bytes := append([]byte{0x8B}, transformCode(s.userCode)...)
 	return s.sendCmd(bytes)
 }
 
