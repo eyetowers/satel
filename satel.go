@@ -12,15 +12,20 @@ import (
 var ErrDisconnected = errors.New("disconnected")
 var ErrCrcNotMatch = errors.New("corrupt response: crc does not match")
 var ErrCorruptedResponse = errors.New("corrupted response: does not match the documentation")
+var ErrForbiddenCommand = errors.New("forbidden command value")
+var ErrTimeout = errors.New("timeout (3 seconds), no response")
+var ErrNoConnection = errors.New("no connection")
+
+const keepAliveCmd = 5
 
 type Satel struct {
-	conn     net.Conn
-	userCode string
-	mu       sync.Mutex
-	cmdSize  int
-	verChan  chan []byte
-	resChan  chan Result
-	handler  Handler
+	conn         net.Conn
+	userCode     string
+	mu           sync.Mutex
+	cmdSize      int
+	versionChan  chan []byte
+	responseChan chan Result
+	handler      Handler
 }
 
 func New(address, userCode string, h Handler) (*Satel, error) {
@@ -32,22 +37,22 @@ func New(address, userCode string, h Handler) (*Satel, error) {
 	if !isUserCodeValid(userCode) {
 		return nil, fmt.Errorf("invalid user code")
 	}
-	return NewConfig(conn, userCode, h)
+	return newConfig(conn, userCode, h)
 }
 
-func NewConfig(conn net.Conn, userCode string, h Handler) (*Satel, error) {
+func newConfig(conn net.Conn, userCode string, h Handler) (*Satel, error) {
 	s := &Satel{
-		conn:     conn,
-		userCode: userCode,
-		verChan:  make(chan []byte),
-		resChan:  make(chan Result),
-		handler:  h,
-		cmdSize:  16,
+		conn:         conn,
+		userCode:     userCode,
+		versionChan:  make(chan []byte),
+		responseChan: make(chan Result),
+		handler:      h,
+		cmdSize:      16,
 	}
 
 	go s.read()
 
-	model, version, err := s.sendVersionCmd(true)
+	model, version, err := s.getDeviceInfo()
 	if err != nil {
 		return nil, fmt.Errorf("error getting device info")
 	}
@@ -68,11 +73,11 @@ func NewConfig(conn net.Conn, userCode string, h Handler) (*Satel, error) {
 
 func (s *Satel) keepConnectionAlive() {
 	for {
-		_, _, err := s.sendVersionCmd(false)
+		err := s.sendReadCmd(0x7E)
 		if err != nil {
 			return
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(keepAliveCmd * time.Second)
 	}
 }
 
@@ -133,8 +138,8 @@ func (s *Satel) prepareCommand(cmd byte, cmdSize int, index int) []byte {
 }
 
 func (s *Satel) Close() error {
-	close(s.verChan)
-	close(s.resChan)
+	close(s.versionChan)
+	close(s.responseChan)
 	return s.conn.Close()
 }
 
@@ -143,16 +148,18 @@ func decomposePayload(bytes ...byte) (byte, []byte, error) {
 	if len(bytes) < minByteLength {
 		return 0, nil, ErrCorruptedResponse
 	}
+	crcIndex := len(bytes) - 2
+	crc := bytes[crcIndex:]
 	cmd := bytes[0]
-	dataWithCmd := bytes[:len(bytes)-2]
-	data := bytes[1 : len(bytes)-2]
-	crc := bytes[len(bytes)-2:]
+	dataWithCmd := bytes[:crcIndex]
+	data := dataWithCmd[1:]
+
 	if !isCrcValid(dataWithCmd, crc) {
 		return 0, nil, ErrCrcNotMatch
 	}
 
 	if cmd == 0xFE {
-		return 0, nil, ErrCorruptedResponse
+		return 0, nil, ErrForbiddenCommand
 	}
 	return cmd, data, nil
 }
@@ -166,7 +173,7 @@ func (s *Satel) read() {
 	scanner := bufio.NewScanner(s.conn)
 	scanner.Split(scan)
 	commands := make(map[byte]command)
-	defer s.Close()
+	defer s.conn.Close()
 
 	for {
 		ok := scanner.Scan()
@@ -176,7 +183,7 @@ func (s *Satel) read() {
 			} else {
 				s.handler.OnError(scanner.Err())
 			}
-			break
+			return
 		}
 
 		bytes := scanner.Bytes()
@@ -215,57 +222,69 @@ func (s *Satel) read() {
 
 func (s *Satel) sendVersionResponse(data ...byte) {
 	select {
-	case s.verChan <- data:
+	case s.versionChan <- data:
 	default:
 	}
 }
 
 func (s *Satel) sendResponseStatus(r byte) {
 	select {
-	case s.resChan <- Result(r):
+	case s.responseChan <- Result(r):
 	default:
 	}
 }
 
 func (s *Satel) cmdResponseStatus() error {
 	select {
-	case r := <-s.resChan:
+	case r := <-s.responseChan:
 		if r.IsError() {
 			return fmt.Errorf(r.String())
 		}
 		return nil
 	case <-time.After(3 * time.Second):
-		return fmt.Errorf("timeout (3 seconds), no response")
+		return ErrTimeout
 	}
 }
 
-func (s *Satel) sendVersionCmd(waitForResponse bool) (string, string, error) {
+func (s *Satel) getDeviceInfo() (string, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	cmd := byte(0x7E)
 	if s.conn == nil {
-		return "", "", errors.New("no connection")
+		return "", "", ErrNoConnection
 	}
 	_, err := s.conn.Write(frame(cmd))
 	if err != nil {
 		return "", "", err
 	}
-	if !waitForResponse {
-		select {
-		case <-s.verChan:
-		case <-time.After(3 * time.Second):
-		}
-		return "", "", nil
+
+	select {
+	case r := <-s.versionChan:
+		model, version := decodeDeviceInfo(r...)
+		return model, version, nil
+	case <-time.After(3 * time.Second):
+		return "", "", ErrTimeout
+	}
+}
+
+func (s *Satel) sendReadCmd(cmd ...byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.conn == nil {
+		return ErrNoConnection
+	}
+	_, err := s.conn.Write(frame(cmd...))
+	if err != nil {
+		return err
 	}
 
 	select {
-	case r := <-s.verChan:
-		model, version := getDeviceInfo(r...)
-		return model, version, nil
+	case <-s.versionChan:
 	case <-time.After(3 * time.Second):
-		return "", "", errors.New("timeout")
 	}
+	return nil
 }
 
 func (s *Satel) sendCmd(data []byte) error {
@@ -273,7 +292,7 @@ func (s *Satel) sendCmd(data []byte) error {
 	defer s.mu.Unlock()
 
 	if s.conn == nil {
-		return errors.New("no connection")
+		return ErrNoConnection
 	}
 	_, err := s.conn.Write(frame(data...))
 	if err != nil {

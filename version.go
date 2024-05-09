@@ -39,7 +39,7 @@ func (d device) String() string {
 	return devices[d]
 }
 
-func getDeviceInfo(data ...byte) (string, string) {
+func decodeDeviceInfo(data ...byte) (string, string) {
 	model := device(data[0]).String()
 	var version strings.Builder
 	data = data[1:]

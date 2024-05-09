@@ -16,7 +16,7 @@ func appendBytes(bytes ...[]byte) []byte {
 	return newBytes
 }
 
-func Test_Scan(t *testing.T) {
+func Test_Scan_Pass(t *testing.T) {
 
 	garbageBytes := []byte{0xA6, 0x75, 0xF8, 0x23, 0xE9, 0x44, 0xC0, 0x5A, 0x0B, 0x9D}
 	preamble := []byte{0xFE, 0xFE}
@@ -92,6 +92,48 @@ func Test_Scan(t *testing.T) {
 			for i := range result {
 				require.Equal(t, c.expect[i], result[i])
 			}
+
+		})
+	}
+}
+
+func Test_Scan_Fail(t *testing.T) {
+
+	garbageBytes := []byte{0xA6, 0x75, 0xF8, 0x23, 0xE9, 0x44, 0xC0, 0x5A, 0x0B, 0x9D}
+	preamble := []byte{0xFE, 0xFE}
+	postamble := []byte{0xFE, 0x0D}
+
+	cases := []struct {
+		name  string
+		input []byte
+	}{
+		{
+			name:  "postamble before preamble",
+			input: appendBytes(garbageBytes, postamble, []byte{0xFE, 0xCD, 0xEF, 0x12, 0x34, 0x56, 0x78}, preamble, garbageBytes),
+		},
+		{
+			name:  "no preamble",
+			input: appendBytes([]byte{0x01, 0xCD, 0xEF, 0x12, 0x34, 0x56, 0x78}, postamble, garbageBytes, []byte{0x02, 0xCD, 0xEF, 0x56, 0x78}, postamble),
+		},
+		{
+			name:  "no escape byte for 0xFE",
+			input: appendBytes(preamble, []byte{0x01, 0xCD, 0xEF, 0x12, 0xFE, 0x78}, postamble, garbageBytes, garbageBytes, preamble, []byte{0x02, 0xFE, 0xFE, 0xF0}, postamble),
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// When.
+			mockReader := bytes.NewReader(c.input)
+			scanner := bufio.NewScanner(mockReader)
+			scanner.Split(scan)
+
+			for scanner.Scan() {
+				scanner.Bytes()
+			}
+
+			// Then.
+			require.Error(t, scanner.Err())
 
 		})
 	}

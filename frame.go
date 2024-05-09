@@ -1,6 +1,7 @@
 package satel
 
 import (
+	"bytes"
 	"math/bits"
 )
 
@@ -46,12 +47,5 @@ func escapeAppend(buf []byte, data ...byte) []byte {
 
 func isCrcValid(data []byte, targetCrc []byte) bool {
 	validCrc := crc(data)
-
-	for i := range targetCrc {
-		if validCrc[i] != targetCrc[i] {
-			return false
-		}
-	}
-
-	return true
+	return bytes.Equal(validCrc, targetCrc)
 }
