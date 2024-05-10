@@ -1,14 +1,19 @@
 package satel
 
-func isUserCodeValid(usercode string) bool {
+import "errors"
+
+var ErrInvalidChar = errors.New("contains invalid character")
+var ErrInvalidLength = errors.New("does not match the expected length")
+
+func validateUsercode(usercode string) error {
 	if len(usercode) != 4 {
-		return false
+		return ErrInvalidLength
 	}
 
 	for _, char := range usercode {
 		if char < '0' || char > '9' {
-			return false
+			return ErrInvalidChar
 		}
 	}
-	return true
+	return nil
 }

@@ -21,7 +21,7 @@ const keepAliveCmd = 5
 
 type Satel struct {
 	conn         net.Conn
-	userCode     string
+	usercode     string
 	mu           sync.Mutex
 	cmdSize      int
 	versionChan  chan []byte
@@ -31,22 +31,24 @@ type Satel struct {
 	done         chan bool
 }
 
-func New(address, userCode string, h Handler) (*Satel, error) {
+func New(address, usercode string, h Handler) (*Satel, error) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		return nil, fmt.Errorf("connection to %s failed with error: %w", address, err)
 	}
 
-	if !isUserCodeValid(userCode) {
-		return nil, fmt.Errorf("invalid user code")
+	err = validateUsercode(usercode)
+	if err != nil {
+		return nil, err
 	}
-	return newConfig(conn, userCode, h)
+
+	return newConfig(conn, usercode, h)
 }
 
-func newConfig(conn net.Conn, userCode string, h Handler) (*Satel, error) {
+func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 	s := &Satel{
 		conn:         conn,
-		userCode:     userCode,
+		usercode:     usercode,
 		versionChan:  make(chan []byte),
 		responseChan: make(chan Result),
 		handler:      h,
@@ -58,7 +60,7 @@ func newConfig(conn net.Conn, userCode string, h Handler) (*Satel, error) {
 
 	model, version, err := s.getDeviceInfo()
 	if err != nil {
-		return nil, fmt.Errorf("error getting device info")
+		return nil, err
 	}
 	if version[0] == 0x32 && model == INTEGRA256Plus.String() {
 		s.cmdSize = 32
@@ -130,14 +132,14 @@ func (s *Satel) SetOutput(index int, value bool) error {
 }
 
 func (s *Satel) ClaerTroubleMemory() error {
-	bytes := append([]byte{0x8B}, transformCode(s.userCode)...)
+	bytes := append([]byte{0x8B}, transformCode(s.usercode)...)
 	return s.sendCmd(bytes)
 }
 
 func (s *Satel) prepareCommand(cmd byte, cmdSize int, index int) []byte {
 	data := make([]byte, cmdSize)
 	data[index/8] = 1 << (index % 8)
-	bytes := append([]byte{cmd}, transformCode(s.userCode)...)
+	bytes := append([]byte{cmd}, transformCode(s.usercode)...)
 	return append(bytes, data...)
 }
 

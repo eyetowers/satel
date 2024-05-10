@@ -1,7 +1,7 @@
 package satel
 
 import (
-	"strings"
+	"fmt"
 )
 
 type device byte
@@ -41,24 +41,7 @@ func (d device) String() string {
 
 func decodeDeviceInfo(data ...byte) (string, string) {
 	model := device(data[0]).String()
-	var version strings.Builder
 	data = data[1:]
-
-	for i, d := range data {
-		if i == 1 {
-			version.WriteString(".")
-		}
-
-		if i == 3 {
-			version.WriteString(" ")
-		}
-
-		if i == 7 || i == 9 {
-			version.WriteString("-")
-		}
-
-		version.WriteString(string(d))
-	}
-
-	return model, version.String()
+	version := fmt.Sprintf("%s.%s %s-%s-%s", data[:1], data[1:3], data[3:7], data[7:9], data[9:])
+	return model, version
 }
