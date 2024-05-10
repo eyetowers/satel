@@ -21,7 +21,7 @@ const keepAliveCmd = 5
 
 type Satel struct {
 	conn         net.Conn
-	usercode     string
+	usercode     []byte
 	mu           sync.Mutex
 	cmdSize      int
 	versionChan  chan []byte
@@ -48,7 +48,7 @@ func New(address, usercode string, h Handler) (*Satel, error) {
 func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 	s := &Satel{
 		conn:         conn,
-		usercode:     usercode,
+		usercode:     transformCode(usercode),
 		versionChan:  make(chan []byte),
 		responseChan: make(chan Result),
 		handler:      h,
@@ -131,15 +131,15 @@ func (s *Satel) SetOutput(index int, value bool) error {
 	return s.sendCmd(bytes)
 }
 
-func (s *Satel) ClaerTroubleMemory() error {
-	bytes := append([]byte{0x8B}, transformCode(s.usercode)...)
+func (s *Satel) ClearTroubleMemory() error {
+	bytes := append([]byte{0x8B}, s.usercode...)
 	return s.sendCmd(bytes)
 }
 
 func (s *Satel) prepareCommand(cmd byte, cmdSize int, index int) []byte {
 	data := make([]byte, cmdSize)
 	data[index/8] = 1 << (index % 8)
-	bytes := append([]byte{cmd}, transformCode(s.usercode)...)
+	bytes := append([]byte{cmd}, s.usercode...)
 	return append(bytes, data...)
 }
 
@@ -282,8 +282,8 @@ func (s *Satel) getDeviceInfo() (string, string, error) {
 
 	select {
 	case r := <-s.versionChan:
-		model, version := decodeDeviceInfo(r...)
-		return model, version, nil
+		model, version, err := decodeDeviceInfo(r...)
+		return model, version, err
 	case <-time.After(3 * time.Second):
 		return "", "", ErrTimeout
 	}

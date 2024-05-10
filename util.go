@@ -2,8 +2,8 @@ package satel
 
 import "errors"
 
-var ErrInvalidChar = errors.New("contains invalid character")
-var ErrInvalidLength = errors.New("does not match the expected length")
+var ErrInvalidChar = errors.New("usercode contains invalid character")
+var ErrInvalidLength = errors.New("usercode does not match the expected length")
 
 func validateUsercode(usercode string) error {
 	if len(usercode) != 4 {

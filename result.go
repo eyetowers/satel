@@ -6,7 +6,7 @@ type Result byte
 
 const (
 	Ok                        Result = 0x00
-	ReqUserCodeNotFound       Result = 0x01
+	ReqUsercodeNotFound       Result = 0x01
 	NoAccess                  Result = 0x02
 	SelectedUserNotExist      Result = 0x03
 	SelectedUserAlreadyExists Result = 0x04
@@ -27,7 +27,7 @@ func (r Result) String() string {
 
 	strings := map[Result]string{
 		Ok:                        "ok",
-		ReqUserCodeNotFound:       "requesting user code not found",
+		ReqUsercodeNotFound:       "requesting user code not found",
 		NoAccess:                  "no access",
 		SelectedUserNotExist:      "selected user does not exist",
 		SelectedUserAlreadyExists: "selected user already exists",

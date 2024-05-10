@@ -39,9 +39,12 @@ func (d device) String() string {
 	return devices[d]
 }
 
-func decodeDeviceInfo(data ...byte) (string, string) {
+func decodeDeviceInfo(data ...byte) (string, string, error) {
+	if len(data) != 14 {
+		return "", "", fmt.Errorf("failed to decode device info %w", ErrCorruptedResponse)
+	}
 	model := device(data[0]).String()
 	data = data[1:]
-	version := fmt.Sprintf("%s.%s %s-%s-%s", data[:1], data[1:3], data[3:7], data[7:9], data[9:])
-	return model, version
+	version := fmt.Sprintf("%s.%s %s-%s-%s", data[:1], data[1:3], data[3:7], data[7:9], data[9:11])
+	return model, version, nil
 }
