@@ -9,9 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      GOPRIVATE: github.com/eyetowers/*
-      CR_PAT: ${{ secrets.CR_PAT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -19,9 +16,6 @@ jobs:
         uses: magnetikonline/action-golang-cache@v4
         with:
           go-version-file: go.mod
-
-      - name: Credentials
-        run: git config --global url.https://$CR_PAT@github.com/.insteadOf https://github.com/
 
       - name: Lint
         run: go run github.com/golangci/golangci-lint/cmd/golangci-lint run --timeout=180s
