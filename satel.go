@@ -230,7 +230,7 @@ func (s *Satel) read() {
 				if !c.initialized || change&index != 0 {
 					handleChange := handlerFunc(s.handler, ChangeType(cmd))
 					if !s.closing.Load() {
-						handleChange((i*8 + j), bb&index != 0)
+						handleChange((i*8 + j), bb&index != 0, !c.initialized)
 					}
 				}
 			}
