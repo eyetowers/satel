@@ -89,3 +89,48 @@ func handlerFunc(h Handler, cmd ChangeType) func(int, bool, bool) {
 
 	return functions[cmd]
 }
+
+// IgnoreHandler implements empty Handler functions. Use this to ignore the Handler functions.
+// Overwrite what you want to use.
+type IgnoreHandler struct {
+}
+
+func (IgnoreHandler) OnZoneViolations(index int, state, initial bool)                {}
+func (IgnoreHandler) OnZoneTamper(index int, state, initial bool)                    {}
+func (IgnoreHandler) OnZoneAlarm(index int, state, initial bool)                     {}
+func (IgnoreHandler) OnZoneTamperAlarm(index int, state, initial bool)               {}
+func (IgnoreHandler) OnZoneAlarmMemory(index int, state, initial bool)               {}
+func (IgnoreHandler) OnZoneTamperAlarmMemory(index int, state, initial bool)         {}
+func (IgnoreHandler) OnZoneBypass(index int, state, initial bool)                    {}
+func (IgnoreHandler) OnZoneNoViolationTrouble(index int, state, initial bool)        {}
+func (IgnoreHandler) OnZoneLongViolationTrouble(index int, state, initial bool)      {}
+func (IgnoreHandler) OnArmedPartitionSuppressed(index int, state, initial bool)      {}
+func (IgnoreHandler) OnArmedPartition(index int, state, initial bool)                {}
+func (IgnoreHandler) OnPartitionArmedInMode2(index int, state, initial bool)         {}
+func (IgnoreHandler) OnPartitionArmedInMode3(index int, state, initial bool)         {}
+func (IgnoreHandler) OnPartitionWith1stCodeEntered(index int, state, initial bool)   {}
+func (IgnoreHandler) OnPartitionEntryTime(index int, state, initial bool)            {}
+func (IgnoreHandler) OnPartitionExitTimeOver10s(index int, state, initial bool)      {}
+func (IgnoreHandler) OnPartitionExitTimeUnder10s(index int, state, initial bool)     {}
+func (IgnoreHandler) OnPartitionTemporaryBlocked(index int, state, initial bool)     {}
+func (IgnoreHandler) OnPartitionBlockedForGuardRound(index int, state, initial bool) {}
+func (IgnoreHandler) OnPartitionAlarm(index int, state, initial bool)                {}
+func (IgnoreHandler) OnPartitionFireAlarm(index int, state, initial bool)            {}
+func (IgnoreHandler) OnPartitionAlarmMemory(index int, state, initial bool)          {}
+func (IgnoreHandler) OnPartitionFireAlarmMemory(index int, state, initial bool)      {}
+func (IgnoreHandler) OnOutput(index int, state, initial bool)                        {}
+func (IgnoreHandler) OnDoorOpened(index int, state, initial bool)                    {}
+func (IgnoreHandler) OnDoorOpenedLong(index int, state, initial bool)                {}
+func (IgnoreHandler) OnStatusBit(index int, state, initial bool)                     {}
+func (IgnoreHandler) OnTroublePart1(index int, state, initial bool)                  {}
+func (IgnoreHandler) OnTroublePart2(index int, state, initial bool)                  {}
+func (IgnoreHandler) OnTroublePart3(index int, state, initial bool)                  {}
+func (IgnoreHandler) OnTroublePart4(index int, state, initial bool)                  {}
+func (IgnoreHandler) OnTroublePart5(index int, state, initial bool)                  {}
+func (IgnoreHandler) OnTroubleMemoryPart1(index int, state, initial bool)            {}
+func (IgnoreHandler) OnTroubleMemoryPart2(index int, state, initial bool)            {}
+func (IgnoreHandler) OnTroubleMemoryPart3(index int, state, initial bool)            {}
+func (IgnoreHandler) OnTroubleMemoryPart4(index int, state, initial bool)            {}
+func (IgnoreHandler) OnTroubleMemoryPart5(index int, state, initial bool)            {}
+func (IgnoreHandler) OnPartitionWithViolatedZones(index int, state, initial bool)    {}
+func (IgnoreHandler) OnZoneIsolate(index int, state, initial bool)                   {}
