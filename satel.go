@@ -230,7 +230,7 @@ func (s *Satel) read() {
 				if !c.initialized || change&index != 0 {
 					handleChange := handlerFunc(s.handler, ChangeType(cmd))
 					if !s.closing.Load() {
-						// Adding 1 to index since Satel device index starts at 1 instead of 0
+						// Adding 1 to index since Satel device index starts at 1 instead of 0.
 						handleChange(((i * 8) + j + 1), bb&index != 0, !c.initialized)
 					}
 				}
