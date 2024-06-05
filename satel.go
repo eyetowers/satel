@@ -248,9 +248,9 @@ func (s *Satel) read() {
 }
 
 func (s *Satel) handleTroublePart3(i, j int, bb, index byte, c command) {
-	troubleType := Trouble3Type(i / 15)
-	idx := (((i - (int(troubleType) * 15)) * 8) + (8 - j))
-	s.handler.OnTroublePart3(idx, troubleType, bb&index != 0, !c.initialized)
+	byteSegment := i / 15
+	idx := (((i - (byteSegment * 15)) * 8) + (8 - j))
+	s.handler.OnTroublePart3(idx, Trouble3Type(byteSegment), bb&index != 0, !c.initialized)
 }
 
 func (s *Satel) sendVersionResponse(data ...byte) {
