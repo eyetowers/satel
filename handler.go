@@ -133,4 +133,4 @@ func (IgnoreHandler) OnTroubleMemoryPart5(index int, state, initial bool)       
 func (IgnoreHandler) OnPartitionWithViolatedZones(index int, state, initial bool)    {}
 func (IgnoreHandler) OnZoneIsolate(index int, state, initial bool)                   {}
 
-func (IgnoreHandler) OnTroublePart3(index int, troubleType Trouble3Type, trouble, initial bool)
+func (IgnoreHandler) OnTroublePart3(index int, troubleType Trouble3Type, trouble, initial bool) {}
