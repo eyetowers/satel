@@ -30,7 +30,6 @@ type Handler interface {
 	OnStatusBit(index int, state, initial bool)
 	OnTroublePart1(index int, state, initial bool)
 	OnTroublePart2(index int, state, initial bool)
-	OnTroublePart3(index int, state, initial bool)
 	OnTroublePart4(index int, state, initial bool)
 	OnTroublePart5(index int, state, initial bool)
 	OnTroubleMemoryPart1(index int, state, initial bool)
@@ -41,6 +40,7 @@ type Handler interface {
 	OnPartitionWithViolatedZones(index int, state, initial bool)
 	OnZoneIsolate(index int, state, initial bool)
 
+	OnTroublePart3(index int, troubleType Trouble3Type, trouble, initial bool)
 	OnError(err error)
 }
 
@@ -75,7 +75,6 @@ func handlerFunc(h Handler, cmd StateType) func(int, bool, bool) {
 		h.OnStatusBit,
 		h.OnTroublePart1,
 		h.OnTroublePart2,
-		h.OnTroublePart3,
 		h.OnTroublePart4,
 		h.OnTroublePart5,
 		h.OnTroubleMemoryPart1,
@@ -124,7 +123,6 @@ func (IgnoreHandler) OnDoorOpenedLong(index int, state, initial bool)           
 func (IgnoreHandler) OnStatusBit(index int, state, initial bool)                     {}
 func (IgnoreHandler) OnTroublePart1(index int, state, initial bool)                  {}
 func (IgnoreHandler) OnTroublePart2(index int, state, initial bool)                  {}
-func (IgnoreHandler) OnTroublePart3(index int, state, initial bool)                  {}
 func (IgnoreHandler) OnTroublePart4(index int, state, initial bool)                  {}
 func (IgnoreHandler) OnTroublePart5(index int, state, initial bool)                  {}
 func (IgnoreHandler) OnTroubleMemoryPart1(index int, state, initial bool)            {}
@@ -134,3 +132,5 @@ func (IgnoreHandler) OnTroubleMemoryPart4(index int, state, initial bool)       
 func (IgnoreHandler) OnTroubleMemoryPart5(index int, state, initial bool)            {}
 func (IgnoreHandler) OnPartitionWithViolatedZones(index int, state, initial bool)    {}
 func (IgnoreHandler) OnZoneIsolate(index int, state, initial bool)                   {}
+
+func (IgnoreHandler) OnTroublePart3(index int, troubleType Trouble3Type, trouble, initial bool)

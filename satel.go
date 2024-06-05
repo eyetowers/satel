@@ -185,7 +185,7 @@ func (s *Satel) reportError(err error) {
 }
 
 type command struct {
-	prev        [32]byte
+	prev        [64]byte
 	initialized bool
 }
 
@@ -228,6 +228,11 @@ func (s *Satel) read() {
 			for j := 0; j < 8; j++ {
 				index := byte(1 << j)
 				if !c.initialized || change&index != 0 {
+					if cmd == byte(TroublePart3) {
+						s.handleTroublePart3(i, j, bb, index, c)
+						continue
+					}
+
 					handleChange := handlerFunc(s.handler, StateType(cmd))
 					if !s.closing.Load() {
 						// Adding 1 to index since Satel device index starts at 1 instead of 0.
@@ -240,6 +245,12 @@ func (s *Satel) read() {
 		c.initialized = true
 		commands[cmd] = c
 	}
+}
+
+func (s *Satel) handleTroublePart3(i, j int, bb, index byte, c command) {
+	troubleType := Trouble3Type(i / 15)
+	idx := (((i - (int(troubleType) * 15)) * 8) + (8 - j))
+	s.handler.OnTroublePart3(idx, troubleType, bb&index != 0, !c.initialized)
 }
 
 func (s *Satel) sendVersionResponse(data ...byte) {
