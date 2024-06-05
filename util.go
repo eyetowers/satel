@@ -5,6 +5,8 @@ import "errors"
 var ErrInvalidChar = errors.New("usercode contains invalid character")
 var ErrInvalidLength = errors.New("usercode does not match the expected length")
 
+const subscribeCmd = 0x7F
+
 func validateUsercode(usercode string) error {
 	if len(usercode) != 4 {
 		return ErrInvalidLength
@@ -18,16 +20,33 @@ func validateUsercode(usercode string) error {
 	return nil
 }
 
-func subscribe(bytes ...StateType) []byte {
-	subs := make([]byte, 6)
-
+func transformSubscription(bytes ...StateType) []byte {
+	payload := make([]byte, 13)
+	payload[0] = subscribeCmd
 	for _, b := range bytes {
-		pos := b / 8
-		subs[pos] = subs[pos] | (1 << (b % 8))
+		pos := b/8 + 1
+		payload[pos] |= 1 << (b % 8)
 	}
+	return payload
+}
 
-	subs2 := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-	return append([]byte{0x7F}, append(subs, subs2...)...)
+func transformCode(code string) []byte {
+	bytes := make([]byte, 8)
+	for i := 0; i < 16; i++ {
+		if i < len(code) {
+			digit := code[i]
+			if i%2 == 0 {
+				bytes[i/2] = (digit - '0') << 4
+			} else {
+				bytes[i/2] |= digit - '0'
+			}
+		} else if i%2 == 0 {
+			bytes[i/2] = 0xFF
+		} else if i == len(code) {
+			bytes[i/2] |= 0x0F
+		}
+	}
+	return bytes
 }
 
 func subsStates() []StateType {

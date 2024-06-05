@@ -68,8 +68,9 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 
 	go s.keepConnectionAlive()
 
-	subscribedStates := subsStates() // TODO, give this control to the user.
-	err = s.sendCmd(subscribe(subscribedStates...))
+	// TODO(@tsaikat): give subscription control to the user.
+	subscribedStates := subsStates()
+	err = s.sendCmd(transformSubscription(subscribedStates...))
 	if err != nil {
 		return nil, err
 	}
@@ -248,9 +249,12 @@ func (s *Satel) read() {
 }
 
 func (s *Satel) handleTroublePart3(i, j int, bb, index byte, c command) {
-	byteSegment := i / 15
-	idx := (((i - (byteSegment * 15)) * 8) + (8 - j))
-	s.handler.OnTroublePart3(idx, Trouble3Type(byteSegment), bb&index != 0, !c.initialized)
+	byteSegment := 15
+	troubleType := i / byteSegment
+	idx := (i % byteSegment * 8) + j + 1
+	if !s.closing.Load() {
+		s.handler.OnTroublePart3(idx, Trouble3Type(troubleType), bb&index != 0, !c.initialized)
+	}
 }
 
 func (s *Satel) sendVersionResponse(data ...byte) {
@@ -332,23 +336,4 @@ func (s *Satel) sendCmd(data []byte) error {
 		return err
 	}
 	return s.cmdResponseStatus()
-}
-
-func transformCode(code string) []byte {
-	bytes := make([]byte, 8)
-	for i := 0; i < 16; i++ {
-		if i < len(code) {
-			digit := code[i]
-			if i%2 == 0 {
-				bytes[i/2] = (digit - '0') << 4
-			} else {
-				bytes[i/2] |= digit - '0'
-			}
-		} else if i%2 == 0 {
-			bytes[i/2] = 0xFF
-		} else if i == len(code) {
-			bytes[i/2] |= 0x0F
-		}
-	}
-	return bytes
 }
