@@ -1,9 +1,9 @@
 package satel
 
-type ChangeType byte
+type StateType byte
 
 const (
-	ZoneViolation ChangeType = iota
+	ZoneViolation StateType = iota
 	ZoneTamper
 	ZoneAlarm
 	ZoneTamperAlarm
@@ -44,7 +44,7 @@ const (
 	ZoneIsolate
 )
 
-func (c ChangeType) String() string {
+func (c StateType) String() string {
 	strings := [...]string{
 		"zone-violation",
 		"zone-tamper",

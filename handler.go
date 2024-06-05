@@ -44,7 +44,7 @@ type Handler interface {
 	OnError(err error)
 }
 
-func handlerFunc(h Handler, cmd ChangeType) func(int, bool, bool) {
+func handlerFunc(h Handler, cmd StateType) func(int, bool, bool) {
 	functions := [...]func(int, bool, bool){
 		h.OnZoneViolations,
 		h.OnZoneTamper,

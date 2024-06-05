@@ -68,8 +68,8 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 
 	go s.keepConnectionAlive()
 
-	subscribedStates := []byte{0x7F, 0xFF, 0xFF, 0xFF, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-	err = s.sendCmd(subscribedStates)
+	subscribedStates := subsStates() // TODO, give this control to the user.
+	err = s.sendCmd(subscribe(subscribedStates...))
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func (s *Satel) read() {
 			for j := 0; j < 8; j++ {
 				index := byte(1 << j)
 				if !c.initialized || change&index != 0 {
-					handleChange := handlerFunc(s.handler, ChangeType(cmd))
+					handleChange := handlerFunc(s.handler, StateType(cmd))
 					if !s.closing.Load() {
 						// Adding 1 to index since Satel device index starts at 1 instead of 0.
 						handleChange(((i * 8) + j + 1), bb&index != 0, !c.initialized)
