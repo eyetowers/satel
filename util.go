@@ -48,35 +48,3 @@ func transformCode(code string) []byte {
 	}
 	return bytes
 }
-
-func subsStates() []StateType {
-	// first 23 states and Trouble Part 3.
-	states := []StateType{
-		ZoneViolation,
-		ZoneTamper,
-		ZoneAlarm,
-		ZoneTamperAlarm,
-		ZoneAlarmMemory,
-		ZoneTamperAlarmMemory,
-		ZoneBypass,
-		ZoneNoViolationTrouble,
-		ZoneLongViolationTrouble,
-		ArmedPartitionSuppressed,
-		ArmedPartition,
-		PartitionArmedInMode2,
-		PartitionArmedInMode3,
-		PartitionWith1stCodeEntered,
-		PartitionEntryTime,
-		PartitionExitTimeOver10s,
-		PartitionExitTimeUnder10s,
-		PartitionTemporaryBlocked,
-		PartitionBlockedForGuardRound,
-		PartitionAlarm,
-		PartitionFireAlarm,
-		PartitionAlarmMemory,
-		PartitionFireAlarmMemory,
-		Output,
-		TroublePart3,
-	}
-	return states
-}
