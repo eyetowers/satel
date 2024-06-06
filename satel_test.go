@@ -279,6 +279,3 @@ func Test_TransformSubscription(t *testing.T) {
 		})
 	}
 }
-
-func Test_HandleTroublePart3(t *testing.T) {
-}
