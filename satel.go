@@ -31,7 +31,7 @@ type Satel struct {
 	done         chan bool
 }
 
-func New(address, usercode string, h Handler, subscribe []StateType) (*Satel, error) {
+func New(address, usercode string, h Handler, subs []StateType) (*Satel, error) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		return nil, fmt.Errorf("connection to %s failed with error: %w", address, err)
@@ -42,10 +42,10 @@ func New(address, usercode string, h Handler, subscribe []StateType) (*Satel, er
 		return nil, err
 	}
 
-	return newConfig(conn, usercode, h, subscribe)
+	return newConfig(conn, usercode, h, subs)
 }
 
-func newConfig(conn net.Conn, usercode string, h Handler, subscribe []StateType) (*Satel, error) {
+func newConfig(conn net.Conn, usercode string, h Handler, subs []StateType) (*Satel, error) {
 	s := &Satel{
 		conn:         conn,
 		usercode:     transformCode(usercode),
@@ -68,7 +68,7 @@ func newConfig(conn net.Conn, usercode string, h Handler, subscribe []StateType)
 
 	go s.keepConnectionAlive()
 
-	err = s.sendCmd(transformSubscription(subscribe...))
+	err = s.sendCmd(transformSubscription(subs...))
 	if err != nil {
 		return nil, err
 	}
