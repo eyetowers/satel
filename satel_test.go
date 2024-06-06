@@ -217,3 +217,65 @@ func Test_TransformCode(t *testing.T) {
 		})
 	}
 }
+
+func Test_TransformSubscription(t *testing.T) {
+
+	cases := []struct {
+		name   string
+		input  []StateType
+		expect []byte
+	}{
+		{
+			"1",
+			[]StateType{
+				ZoneViolation,
+				ZoneTamper,
+				ZoneAlarm,
+				ZoneTamperAlarm,
+				ZoneAlarmMemory,
+				ZoneTamperAlarmMemory,
+				ZoneBypass,
+				ZoneNoViolationTrouble,
+			},
+			[]byte{0x7F, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		},
+		{
+			"2",
+			[]StateType{
+				ZoneViolation,
+				ZoneTamper,
+				ZoneAlarm,
+				ZoneTamperAlarm,
+				ZoneAlarmMemory,
+				ZoneTamperAlarmMemory,
+				ZoneBypass,
+				ZoneNoViolationTrouble,
+				TroublePart3,
+			},
+			[]byte{0x7F, 0xFF, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		},
+		{
+			"3",
+			[]StateType{},
+			[]byte{0x7F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		},
+		{
+			"4",
+			[]StateType{
+				ArmedPartition,
+				PartitionArmedInMode2,
+			},
+			[]byte{0x7F, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// When.
+			result := transformSubscription(c.input...)
+
+			// Then.
+			require.Equal(t, c.expect, result)
+		})
+	}
+}

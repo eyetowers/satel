@@ -31,7 +31,7 @@ type Satel struct {
 	done         chan bool
 }
 
-func New(address, usercode string, h Handler) (*Satel, error) {
+func New(address, usercode string, h Handler, subscriptions []StateType) (*Satel, error) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		return nil, fmt.Errorf("connection to %s failed with error: %w", address, err)
@@ -42,10 +42,10 @@ func New(address, usercode string, h Handler) (*Satel, error) {
 		return nil, err
 	}
 
-	return newConfig(conn, usercode, h)
+	return newConfig(conn, usercode, h, subscriptions)
 }
 
-func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
+func newConfig(conn net.Conn, usercode string, h Handler, subscriptions []StateType) (*Satel, error) {
 	s := &Satel{
 		conn:         conn,
 		usercode:     transformCode(usercode),
@@ -68,8 +68,7 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 
 	go s.keepConnectionAlive()
 
-	subscribedStates := []byte{0x7F, 0xFF, 0xFF, 0xFF, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-	err = s.sendCmd(subscribedStates)
+	err = s.sendCmd(transformSubscription(subscriptions...))
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +184,7 @@ func (s *Satel) reportError(err error) {
 }
 
 type command struct {
-	prev        [32]byte
+	prev        [64]byte
 	initialized bool
 }
 
@@ -228,7 +227,12 @@ func (s *Satel) read() {
 			for j := 0; j < 8; j++ {
 				index := byte(1 << j)
 				if !c.initialized || change&index != 0 {
-					handleChange := handlerFunc(s.handler, ChangeType(cmd))
+					if cmd == byte(TroublePart3) {
+						s.handleTroublePart3(i, j, bb, index, c)
+						continue
+					}
+
+					handleChange := handlerFunc(s.handler, StateType(cmd))
 					if !s.closing.Load() {
 						// Adding 1 to index since Satel device index starts at 1 instead of 0.
 						handleChange(((i * 8) + j + 1), bb&index != 0, !c.initialized)
@@ -239,6 +243,15 @@ func (s *Satel) read() {
 		}
 		c.initialized = true
 		commands[cmd] = c
+	}
+}
+
+func (s *Satel) handleTroublePart3(i, j int, bb, index byte, c command) {
+	byteSegment := 15
+	troubleType := i / byteSegment
+	idx := (i % byteSegment * 8) + j + 1
+	if !s.closing.Load() {
+		s.handler.OnTroublePart3(idx, Trouble3Type(troubleType), bb&index != 0, !c.initialized)
 	}
 }
 
@@ -321,23 +334,4 @@ func (s *Satel) sendCmd(data []byte) error {
 		return err
 	}
 	return s.cmdResponseStatus()
-}
-
-func transformCode(code string) []byte {
-	bytes := make([]byte, 8)
-	for i := 0; i < 16; i++ {
-		if i < len(code) {
-			digit := code[i]
-			if i%2 == 0 {
-				bytes[i/2] = (digit - '0') << 4
-			} else {
-				bytes[i/2] |= digit - '0'
-			}
-		} else if i%2 == 0 {
-			bytes[i/2] = 0xFF
-		} else if i == len(code) {
-			bytes[i/2] |= 0x0F
-		}
-	}
-	return bytes
 }
