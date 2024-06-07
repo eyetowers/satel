@@ -31,7 +31,7 @@ type Satel struct {
 	done         chan bool
 }
 
-func New(address, usercode string, h Handler, subscriptions []StateType) (*Satel, error) {
+func New(address, usercode string, h Handler) (*Satel, error) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		return nil, fmt.Errorf("connection to %s failed with error: %w", address, err)
@@ -42,10 +42,10 @@ func New(address, usercode string, h Handler, subscriptions []StateType) (*Satel
 		return nil, err
 	}
 
-	return newConfig(conn, usercode, h, subscriptions)
+	return newConfig(conn, usercode, h)
 }
 
-func newConfig(conn net.Conn, usercode string, h Handler, subscriptions []StateType) (*Satel, error) {
+func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 	s := &Satel{
 		conn:         conn,
 		usercode:     transformCode(usercode),
@@ -68,12 +68,17 @@ func newConfig(conn net.Conn, usercode string, h Handler, subscriptions []StateT
 
 	go s.keepConnectionAlive()
 
-	err = s.sendCmd(transformSubscription(subscriptions...))
-	if err != nil {
-		return nil, err
-	}
-
 	return s, nil
+}
+
+// Subscribe will subscribe to `states` StateType.
+// This will activate Satel to send updates on any changed data on `states` StateType.
+func (s *Satel) Subscribe(states ...StateType) error {
+	err := s.sendCmd(transformSubscription(states...))
+	if err != nil {
+		return fmt.Errorf("failed to subscribe: %w", err)
+	}
+	return nil
 }
 
 func (s *Satel) keepConnectionAlive() {
