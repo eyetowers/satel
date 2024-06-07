@@ -71,8 +71,8 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 	return s, nil
 }
 
-// Subscribe will subscribe to `st` StateType.
-// This will activate Satel to send updates on any changed data on `st` StateType.
+// Subscribe will subscribe to `states` StateType.
+// This will activate Satel to send updates on any changed data on `states` StateType.
 func (s *Satel) Subscribe(states ...StateType) error {
 	err := s.sendCmd(transformSubscription(states...))
 	if err != nil {
