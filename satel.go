@@ -363,7 +363,7 @@ func (s *Satel) returnResponse(cmd byte, data ...byte) {
 	select {
 	case s.responseChan <- resp:
 	default:
-		s.handler.OnError(ErrReturnResponse)
+		s.reportError(ErrReturnResponse)
 	}
 }
 
