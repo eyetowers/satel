@@ -17,18 +17,43 @@ var ErrForbiddenCommand = errors.New("forbidden command value")
 var ErrTimeout = errors.New("timeout (3 seconds), no response")
 var ErrNoConnection = errors.New("no connection")
 
-const keepAliveCmd = 5
+const (
+	KeepAliveInterval = 5 * time.Second
+	CmdTimeOut        = 3 * time.Second
+
+	ResponseStatusCmd = byte(0xEF)
+	VersionStatusCmd  = byte(0x7E)
+	DeviceInfoCmd     = byte(0x7E)
+	ReadDeviceCmd     = byte(0xEE)
+)
 
 type Satel struct {
-	conn         net.Conn
-	usercode     []byte
-	mu           sync.Mutex
-	cmdSize      int
-	versionChan  chan []byte
-	responseChan chan Result
+	conn     net.Conn
+	usercode []byte
+	mu       sync.Mutex
+	cmdSize  int
+
+	responseChan chan Response
 	handler      Handler
 	closing      atomic.Bool
 	done         chan bool
+}
+
+type Response struct {
+	cmd    byte
+	data   []byte
+	status ResponseStatus
+}
+
+type Zone struct {
+	ID        uint64
+	Name      string
+	Partition Partition
+}
+
+type Partition struct {
+	ID   uint64
+	Name string
 }
 
 func New(address, usercode string, h Handler) (*Satel, error) {
@@ -49,8 +74,7 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 	s := &Satel{
 		conn:         conn,
 		usercode:     transformCode(usercode),
-		versionChan:  make(chan []byte),
-		responseChan: make(chan Result),
+		responseChan: make(chan Response),
 		handler:      h,
 		cmdSize:      16,
 		done:         make(chan bool),
@@ -62,7 +86,7 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 	if err != nil {
 		return nil, err
 	}
-	if version[0] == 0x32 && model == INTEGRA256Plus.String() {
+	if version[0] == '2' && model == INTEGRA256Plus.String() {
 		s.cmdSize = 32
 	}
 
@@ -71,59 +95,162 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 	return s, nil
 }
 
+func (s *Satel) keepConnectionAlive() {
+	for {
+		_, err := s.sendCmd(DeviceInfoCmd)
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+		time.Sleep(KeepAliveInterval)
+	}
+}
+
+func (s *Satel) GetZones() ([]Zone, error) {
+	possibleZones := 64
+	cmd := ReadDeviceCmd
+	typeZone := byte(0x05)
+	expectedResposeSize := 20
+
+	var zones []Zone
+	partitions := make(map[uint64]Partition)
+	for i := 1; i < possibleZones; i++ {
+		resp, err := s.sendCmd(cmd, typeZone, byte(i))
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.cmd != cmd && resp.cmd != ResponseStatusCmd {
+			return nil, fmt.Errorf("unexpected response recieved while getting zone(%d) information", i)
+		}
+
+		if resp.cmd == ResponseStatusCmd {
+			continue
+		}
+
+		if len(resp.data) != expectedResposeSize {
+			return nil, fmt.Errorf("getting zone information. payload size(%d) does not match expected payload size(%d)",
+				len(resp.data), expectedResposeSize,
+			)
+		}
+
+		deviceType, zoneID, name, partitionID := decodeZone(resp.data)
+		if typeZone != deviceType {
+			return nil, fmt.Errorf("unexpected. payload received for wrong type")
+		}
+
+		partition, exist := partitions[partitionID]
+		if !exist {
+			partition, err = s.getPartition(partitionID)
+			if err != nil {
+				return nil, err
+			}
+			partitions[partitionID] = partition
+		}
+		zone := Zone{
+			ID:        zoneID,
+			Name:      name,
+			Partition: partition,
+		}
+		zones = append(zones, zone)
+	}
+
+	return zones, nil
+}
+
+func (s *Satel) getPartition(partition uint64) (Partition, error) {
+	cmd := ReadDeviceCmd
+	typePartition := byte(0x00)
+	expectedResposeSize := 19
+
+	resp, err := s.sendCmd(cmd, typePartition, byte(partition))
+	if err != nil {
+		return Partition{}, err
+	}
+
+	if resp.cmd != cmd && resp.cmd != ResponseStatusCmd {
+		return Partition{}, fmt.Errorf("unexpected response recieved while getting partition(%d) information", partition)
+	}
+
+	if resp.cmd == ResponseStatusCmd {
+		return Partition{}, fmt.Errorf("unexpected. getting partition information of a zone failed")
+	}
+
+	if len(resp.data) != expectedResposeSize {
+		return Partition{}, fmt.Errorf("getting partition information. payload size(%d) does not match expected payload size(%d)",
+			len(resp.data), expectedResposeSize,
+		)
+	}
+
+	deviceType, partitionID, partitionName := decodePartition(resp.data)
+	if typePartition != deviceType {
+		return Partition{}, fmt.Errorf("unexpected. payload received for wrong type")
+	}
+
+	return Partition{
+		ID:   partitionID,
+		Name: partitionName,
+	}, nil
+}
+
+func decodePartition(data []byte) (byte, uint64, string) {
+	deviceType := data[0]
+	partitionID := data[1]
+	name := string(data[3:])
+	return deviceType, uint64(partitionID), name
+}
+
+func decodeZone(data []byte) (byte, uint64, string, uint64) {
+	deviceType := data[0]
+	zoneID := data[1]
+	name := string(data[3 : len(data)-1])
+	partition := data[len(data)-1]
+	return deviceType, uint64(zoneID), name, uint64(partition)
+}
+
 // Subscribe will subscribe to `states` StateType.
 // This will activate Satel to send updates on any changed data on `states` StateType.
 func (s *Satel) Subscribe(states ...StateType) error {
-	err := s.sendCmd(transformSubscription(states...))
+	err := s.sendCmdWithResultCheck(transformSubscription(states...))
 	if err != nil {
 		return fmt.Errorf("failed to subscribe: %w", err)
 	}
 	return nil
 }
 
-func (s *Satel) keepConnectionAlive() {
-	for {
-		err := s.sendReadCmd(0x7E)
-		if err != nil {
-			return
-		}
-		time.Sleep(keepAliveCmd * time.Second)
-	}
-}
-
 func (s *Satel) ArmPartition(mode, index int) error {
 	bytes := s.prepareCommand(byte(0x80+mode), 4, index)
-	return s.sendCmd(bytes)
+	return s.sendCmdWithResultCheck(bytes)
 }
 
 func (s *Satel) ForceArmPartition(mode, index int) error {
 	bytes := s.prepareCommand(byte(0xA0+mode), 4, index)
-	return s.sendCmd(bytes)
+	return s.sendCmdWithResultCheck(bytes)
 }
 
 func (s *Satel) DisarmPartition(index int) error {
 	bytes := s.prepareCommand(byte(0x84), 4, index)
-	return s.sendCmd(bytes)
+	return s.sendCmdWithResultCheck(bytes)
 }
 
 func (s *Satel) ClearAlarm(index int) error {
 	bytes := s.prepareCommand(byte(0x85), 4, index)
-	return s.sendCmd(bytes)
+	return s.sendCmdWithResultCheck(bytes)
 }
 
 func (s *Satel) AlarmCheck(index int) error {
 	bytes := s.prepareCommand(byte(0x13), 4, index)
-	return s.sendCmd(bytes)
+	return s.sendCmdWithResultCheck(bytes)
 }
 
 func (s *Satel) ZoneBypass(zone int) error {
 	bytes := s.prepareCommand(byte(0x86), s.cmdSize, zone)
-	return s.sendCmd(bytes)
+	return s.sendCmdWithResultCheck(bytes)
 }
 
 func (s *Satel) ZoneUnBypass(zone int) error {
 	bytes := s.prepareCommand(byte(0x87), s.cmdSize, zone)
-	return s.sendCmd(bytes)
+	return s.sendCmdWithResultCheck(bytes)
 }
 
 func (s *Satel) SetOutput(index int, value bool) error {
@@ -132,12 +259,12 @@ func (s *Satel) SetOutput(index int, value bool) error {
 		cmd = 0x88
 	}
 	bytes := s.prepareCommand(cmd, s.cmdSize, index)
-	return s.sendCmd(bytes)
+	return s.sendCmdWithResultCheck(bytes)
 }
 
 func (s *Satel) ClearTroubleMemory() error {
 	bytes := append([]byte{0x8B}, s.usercode...)
-	return s.sendCmd(bytes)
+	return s.sendCmdWithResultCheck(bytes)
 }
 
 func (s *Satel) prepareCommand(cmd byte, cmdSize int, index int) []byte {
@@ -176,7 +303,6 @@ func decomposePayload(bytes ...byte) (byte, []byte, error) {
 }
 
 func (s *Satel) closeRead() {
-	close(s.versionChan)
 	close(s.responseChan)
 	s.conn.Close()
 	close(s.done)
@@ -216,13 +342,8 @@ func (s *Satel) read() {
 			break
 		}
 
-		if cmd == 0xEF {
-			s.sendResponseStatus(data[0])
-			continue
-		}
-
-		if cmd == 0x7E {
-			s.sendVersionResponse(data...)
+		if cmd == ResponseStatusCmd || cmd == VersionStatusCmd || cmd == ReadDeviceCmd {
+			s.returnResponse(cmd, data...)
 			continue
 		}
 
@@ -260,83 +381,68 @@ func (s *Satel) handleTroublePart3(i, j int, bb, index byte, c command) {
 	}
 }
 
-func (s *Satel) sendVersionResponse(data ...byte) {
+func (s *Satel) returnResponse(cmd byte, data ...byte) {
+	resp := Response{
+		cmd: cmd,
+	}
+
+	if cmd == ResponseStatusCmd {
+		resp.status = ResponseStatus(data[0])
+	} else {
+		resp.data = data
+	}
+
 	select {
-	case s.versionChan <- data:
+	case s.responseChan <- resp:
 	default:
+		// handle fail to send. should not have failed
 	}
 }
 
-func (s *Satel) sendResponseStatus(r byte) {
-	select {
-	case s.responseChan <- Result(r):
-	default:
-	}
-}
-
-func (s *Satel) cmdResponseStatus() error {
-	select {
-	case r := <-s.responseChan:
-		if r.IsError() {
-			return fmt.Errorf(r.String())
-		}
-		return nil
-	case <-time.After(3 * time.Second):
-		return ErrTimeout
-	}
-}
-
-func (s *Satel) getDeviceInfo() (string, string, error) {
+func (s *Satel) sendCmd(data ...byte) (*Response, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	cmd := byte(0x7E)
 	if s.conn == nil {
-		return "", "", ErrNoConnection
+		return nil, ErrNoConnection
 	}
-	_, err := s.conn.Write(frame(cmd))
+	_, err := s.conn.Write(frame(data...))
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 
 	select {
-	case r := <-s.versionChan:
-		model, version, err := decodeDeviceInfo(r...)
-		return model, version, err
-	case <-time.After(3 * time.Second):
-		return "", "", ErrTimeout
+	case resp := <-s.responseChan:
+		return &resp, nil
+	case <-time.After(CmdTimeOut):
+		return nil, ErrTimeout
 	}
 }
 
-func (s *Satel) sendReadCmd(cmd ...byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.conn == nil {
-		return ErrNoConnection
-	}
-	_, err := s.conn.Write(frame(cmd...))
+// sendCmdWithResultCheck sends a command and expects a response status
+// that indicates whether the command was successful or not.
+func (s *Satel) sendCmdWithResultCheck(data []byte) error {
+	resp, err := s.sendCmd(data...)
 	if err != nil {
 		return err
 	}
 
-	select {
-	case <-s.versionChan:
-	case <-time.After(3 * time.Second):
+	if resp.cmd != ResponseStatusCmd {
+		return fmt.Errorf("expected response status (0x%02X) but received for command 0x%02X: %w",
+			ResponseStatusCmd, resp.cmd, ErrCorruptedResponse,
+		)
+		// TODO: need to think this through. the connection is legging. unexpected happen. shall we restart connection?
+	}
+	if resp.status.IsError() {
+		return fmt.Errorf(resp.status.String())
 	}
 	return nil
 }
 
-func (s *Satel) sendCmd(data []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.conn == nil {
-		return ErrNoConnection
-	}
-	_, err := s.conn.Write(frame(data...))
+func (s *Satel) getDeviceInfo() (string, string, error) {
+	resp, err := s.sendCmd(DeviceInfoCmd)
 	if err != nil {
-		return err
+		return "", "", err
 	}
-	return s.cmdResponseStatus()
+	return decodeDeviceInfo(resp.data...)
 }

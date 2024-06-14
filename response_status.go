@@ -2,30 +2,30 @@ package satel
 
 import "fmt"
 
-type Result byte
+type ResponseStatus byte
 
 const (
-	Ok                        Result = 0x00
-	ReqUsercodeNotFound       Result = 0x01
-	NoAccess                  Result = 0x02
-	SelectedUserNotExist      Result = 0x03
-	SelectedUserAlreadyExists Result = 0x04
-	WrongOrDuplicateCode      Result = 0x05
-	TelephoneCodeExists       Result = 0x06
-	ChangedCodeSame           Result = 0x07
-	OtherError                Result = 0x08
-	CannotArmButForceArm      Result = 0x11
-	CannotArm                 Result = 0x12
-	OtherErrors               Result = 0x80 // Placeholder for other errors with 8 as the prefix
-	CommandAccepted           Result = 0xFF
+	Ok                        ResponseStatus = 0x00
+	ReqUsercodeNotFound       ResponseStatus = 0x01
+	NoAccess                  ResponseStatus = 0x02
+	SelectedUserNotExist      ResponseStatus = 0x03
+	SelectedUserAlreadyExists ResponseStatus = 0x04
+	WrongOrDuplicateCode      ResponseStatus = 0x05
+	TelephoneCodeExists       ResponseStatus = 0x06
+	ChangedCodeSame           ResponseStatus = 0x07
+	OtherError                ResponseStatus = 0x08
+	CannotArmButForceArm      ResponseStatus = 0x11
+	CannotArm                 ResponseStatus = 0x12
+	OtherErrors               ResponseStatus = 0x80 // Placeholder for other errors with 8 as the prefix
+	CommandAccepted           ResponseStatus = 0xFF
 )
 
-func (r Result) String() string {
+func (r ResponseStatus) String() string {
 	if r >= 0x80 && r <= 0x8F {
 		return fmt.Sprintf("other errors 0x%02X", byte(r))
 	}
 
-	strings := map[Result]string{
+	strings := map[ResponseStatus]string{
 		Ok:                        "ok",
 		ReqUsercodeNotFound:       "requesting user code not found",
 		NoAccess:                  "no access",
@@ -48,6 +48,6 @@ func (r Result) String() string {
 	return strings[r]
 }
 
-func (r Result) IsError() bool {
+func (r ResponseStatus) IsError() bool {
 	return (r != Ok && r != CommandAccepted)
 }
