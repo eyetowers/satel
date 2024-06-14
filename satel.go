@@ -16,6 +16,7 @@ var ErrCorruptedResponse = errors.New("corrupted response: does not match the do
 var ErrForbiddenCommand = errors.New("forbidden command value")
 var ErrTimeout = errors.New("timeout (3 seconds), no response")
 var ErrNoConnection = errors.New("no connection")
+var ErrReturnResponse = errors.New("failed returning response. unexpectly buffer full")
 
 const (
 	KeepAliveInterval = 5 * time.Second
@@ -107,6 +108,7 @@ func (s *Satel) keepConnectionAlive() {
 }
 
 func (s *Satel) GetZones() ([]Zone, error) {
+	// TODO @tsaikat: need to dynamically select possible zones.
 	possibleZones := 64
 	cmd := ReadDeviceCmd
 	typeZone := byte(0x05)
@@ -125,6 +127,9 @@ func (s *Satel) GetZones() ([]Zone, error) {
 		}
 
 		if resp.cmd == ResponseStatusCmd {
+			if !resp.status.IsError() {
+				return nil, fmt.Errorf("getting zone (%d).expected error", i)
+			}
 			continue
 		}
 
@@ -395,7 +400,7 @@ func (s *Satel) returnResponse(cmd byte, data ...byte) {
 	select {
 	case s.responseChan <- resp:
 	default:
-		// handle fail to send. should not have failed
+		s.handler.OnError(ErrReturnResponse)
 	}
 }
 
