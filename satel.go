@@ -111,13 +111,13 @@ func (s *Satel) GetZones() ([]Zone, error) {
 	// TODO @tsaikat: need to dynamically select possible zones.
 	possibleZones := 32
 	cmd := ReadDeviceCmd
-	typeZone := byte(0x05)
+	zoneDevice := byte(0x05)
 	expectedResposeSize := 20
 
 	var zones []Zone
 	partitions := make(map[uint64]Partition)
 	for i := 1; i < possibleZones; i++ {
-		resp, err := s.sendCmd(cmd, typeZone, byte(i))
+		resp, err := s.sendCmd(cmd, zoneDevice, byte(i))
 		if err != nil {
 			return nil, err
 		}
@@ -140,7 +140,7 @@ func (s *Satel) GetZones() ([]Zone, error) {
 		}
 
 		deviceType, zoneID, name, partitionID := decodeZone(resp.data)
-		if typeZone != deviceType {
+		if zoneDevice != deviceType {
 			return nil, fmt.Errorf("unexpected. payload received for wrong type")
 		}
 
@@ -164,10 +164,10 @@ func (s *Satel) GetZones() ([]Zone, error) {
 
 func (s *Satel) getPartition(partition uint64) (Partition, error) {
 	cmd := ReadDeviceCmd
-	typePartition := byte(0x00)
+	partitionDevice := byte(0x00)
 	expectedResposeSize := 19
 
-	resp, err := s.sendCmd(cmd, typePartition, byte(partition))
+	resp, err := s.sendCmd(cmd, partitionDevice, byte(partition))
 	if err != nil {
 		return Partition{}, err
 	}
@@ -187,7 +187,7 @@ func (s *Satel) getPartition(partition uint64) (Partition, error) {
 	}
 
 	deviceType, partitionID, partitionName := decodePartition(resp.data)
-	if typePartition != deviceType {
+	if partitionDevice != deviceType {
 		return Partition{}, fmt.Errorf("unexpected. payload received for wrong type")
 	}
 
