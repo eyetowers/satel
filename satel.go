@@ -109,7 +109,7 @@ func (s *Satel) keepConnectionAlive() {
 
 func (s *Satel) GetZones() ([]Zone, error) {
 	// TODO @tsaikat: need to dynamically select possible zones.
-	possibleZones := 64
+	possibleZones := 32
 	cmd := ReadDeviceCmd
 	typeZone := byte(0x05)
 	expectedResposeSize := 20
