@@ -48,3 +48,39 @@ func transformCode(code string) []byte {
 	}
 	return bytes
 }
+
+func decomposePayload(bytes ...byte) (byte, []byte, error) {
+	const minByteLength = 3
+	if len(bytes) < minByteLength {
+		return 0, nil, ErrCorruptedResponse
+	}
+	crcIndex := len(bytes) - 2
+	crc := bytes[crcIndex:]
+	cmd := bytes[0]
+	dataWithCmd := bytes[:crcIndex]
+	data := dataWithCmd[1:]
+
+	if !isCrcValid(dataWithCmd, crc) {
+		return 0, nil, ErrCrcNotMatch
+	}
+
+	if cmd == 0xFE {
+		return 0, nil, ErrForbiddenCommand
+	}
+	return cmd, data, nil
+}
+
+func decodePartition(data []byte) (byte, uint64, string) {
+	deviceType := data[0]
+	partitionID := data[1]
+	name := string(data[3:])
+	return deviceType, uint64(partitionID), name
+}
+
+func decodeZone(data []byte) (byte, uint64, string, uint64) {
+	deviceType := data[0]
+	zoneID := data[1]
+	name := string(data[3 : len(data)-1])
+	partition := data[len(data)-1]
+	return deviceType, uint64(zoneID), name, uint64(partition)
+}
