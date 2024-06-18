@@ -382,7 +382,7 @@ func (s *Satel) sendCmd(data ...byte) (*Response, error) {
 	select {
 	case resp := <-s.responseChan:
 		return &resp, nil
-	case <-time.After(CmdTimeOut):
+	case <-time.After(CmdTimeout):
 		return nil, ErrTimeout
 	}
 }
