@@ -147,8 +147,8 @@ func (s *Satel) GetZones() ([]Zone, error) {
 			return nil, fmt.Errorf("getting zone(%d) information, received response is not for zone: %w", i, ErrProtocolViolation)
 		}
 
-		partition, exist := partitions[partitionID]
-		if !exist {
+		partition, exists := partitions[partitionID]
+		if !exists {
 			partition, err = s.getPartition(partitionID)
 			if err != nil {
 				return nil, err
