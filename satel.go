@@ -20,7 +20,7 @@ var ErrReturnResponse = errors.New("failed returning response. unexpectly buffer
 
 const (
 	KeepAliveInterval = 5 * time.Second
-	CmdTimeOut        = 3 * time.Second
+	CmdTimeout        = 3 * time.Second
 
 	ResponseStatusCmd = byte(0xEF)
 	VersionStatusCmd  = byte(0x7E)
