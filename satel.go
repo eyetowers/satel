@@ -17,6 +17,7 @@ var ErrForbiddenCommand = errors.New("forbidden command value")
 var ErrTimeout = errors.New("timeout (3 seconds), no response")
 var ErrNoConnection = errors.New("no connection")
 var ErrReturnResponse = errors.New("failed returning response. unexpectly buffer full")
+var ErrProtocolViolation = errors.New("response violates protocol")
 
 const (
 	KeepAliveInterval = 5 * time.Second
@@ -123,25 +124,27 @@ func (s *Satel) GetZones() ([]Zone, error) {
 		}
 
 		if resp.cmd != cmd && resp.cmd != ResponseStatusCmd {
-			return nil, fmt.Errorf("unexpected response recieved while getting zone(%d) information", i)
+			return nil, fmt.Errorf("getting zone(%d) information, response does not match the command: %w",
+				i, ErrProtocolViolation,
+			)
 		}
 
 		if resp.cmd == ResponseStatusCmd {
 			if !resp.status.IsError() {
-				return nil, fmt.Errorf("getting zone (%d).expected error", i)
+				return nil, fmt.Errorf("response status must be an error while getting zone (%d) : %w", i, ErrProtocolViolation)
 			}
 			continue
 		}
 
 		if len(resp.data) != expectedResposeSize {
-			return nil, fmt.Errorf("getting zone information. payload size(%d) does not match expected payload size(%d)",
-				len(resp.data), expectedResposeSize,
+			return nil, fmt.Errorf("mismatch in zone(%d) information payload size, expected %dB, actual %dB: %w",
+				i, expectedResposeSize, len(resp.data), ErrProtocolViolation,
 			)
 		}
 
 		deviceType, zoneID, name, partitionID := decodeZone(resp.data)
 		if zoneDevice != deviceType {
-			return nil, fmt.Errorf("unexpected. payload received for wrong type")
+			return nil, fmt.Errorf("getting zone(%d) information, received response is not for zone: %w", i, ErrProtocolViolation)
 		}
 
 		partition, exist := partitions[partitionID]
@@ -173,22 +176,24 @@ func (s *Satel) getPartition(partition uint64) (Partition, error) {
 	}
 
 	if resp.cmd != cmd && resp.cmd != ResponseStatusCmd {
-		return Partition{}, fmt.Errorf("unexpected response recieved while getting partition(%d) information", partition)
+		return Partition{}, fmt.Errorf("getting partition(%d) information, response does not match the command: %w",
+			partition, ErrProtocolViolation,
+		)
 	}
 
 	if resp.cmd == ResponseStatusCmd {
-		return Partition{}, fmt.Errorf("unexpected. getting partition information of a zone failed")
+		return Partition{}, fmt.Errorf("response status must be an error while getting partition (%d) : %w", partition, ErrProtocolViolation)
 	}
 
 	if len(resp.data) != expectedResposeSize {
-		return Partition{}, fmt.Errorf("getting partition information. payload size(%d) does not match expected payload size(%d)",
-			len(resp.data), expectedResposeSize,
+		return Partition{}, fmt.Errorf("mismatch in partition (%d) information payload size, expected %dB, actual %dB: %w",
+			partition, expectedResposeSize, len(resp.data), ErrProtocolViolation,
 		)
 	}
 
 	deviceType, partitionID, partitionName := decodePartition(resp.data)
 	if partitionDevice != deviceType {
-		return Partition{}, fmt.Errorf("unexpected. payload received for wrong type")
+		return Partition{}, fmt.Errorf("getting partition(%d) information, received response is not for partition: %w", partition, ErrProtocolViolation)
 	}
 
 	return Partition{
@@ -397,9 +402,8 @@ func (s *Satel) sendCmdWithResultCheck(data []byte) error {
 
 	if resp.cmd != ResponseStatusCmd {
 		return fmt.Errorf("expected response status (0x%02X) but received for command 0x%02X: %w",
-			ResponseStatusCmd, resp.cmd, ErrCorruptedResponse,
+			ResponseStatusCmd, resp.cmd, ErrProtocolViolation,
 		)
-		// TODO: need to think this through. the connection is legging. unexpected happen. shall we restart connection?
 	}
 	if resp.status.IsError() {
 		return fmt.Errorf(resp.status.String())
