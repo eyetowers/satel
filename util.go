@@ -1,6 +1,9 @@
 package satel
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 var ErrInvalidChar = errors.New("usercode contains invalid character")
 var ErrInvalidLength = errors.New("usercode does not match the expected length")
@@ -74,7 +77,7 @@ func decodePartition(data []byte) (byte, uint64, string) {
 	deviceType := data[0]
 	partitionID := data[1]
 	name := string(data[3:])
-	return deviceType, uint64(partitionID), name
+	return deviceType, uint64(partitionID), strings.TrimSpace(name)
 }
 
 func decodeZone(data []byte) (byte, uint64, string, uint64) {
@@ -82,5 +85,5 @@ func decodeZone(data []byte) (byte, uint64, string, uint64) {
 	zoneID := data[1]
 	name := string(data[3 : len(data)-1])
 	partition := data[len(data)-1]
-	return deviceType, uint64(zoneID), name, uint64(partition)
+	return deviceType, uint64(zoneID), strings.TrimSpace(name), uint64(partition)
 }
