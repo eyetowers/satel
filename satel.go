@@ -61,11 +61,13 @@ type Partition struct {
 func New(address, usercode string, h Handler) (*Satel, error) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
+		conn.Close()
 		return nil, fmt.Errorf("connection to %s failed with error: %w", address, err)
 	}
 
 	err = validateUsercode(usercode)
 	if err != nil {
+		conn.Close()
 		return nil, err
 	}
 
@@ -86,6 +88,7 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 
 	model, version, err := s.getDeviceInfo()
 	if err != nil {
+		s.Close()
 		return nil, err
 	}
 	if version[0] == '2' && model == INTEGRA256Plus.String() {
