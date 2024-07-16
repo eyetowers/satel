@@ -215,18 +215,18 @@ func (s *Satel) Subscribe(states ...StateType) error {
 	return nil
 }
 
-func (s *Satel) ArmPartition(mode, index int) error {
-	bytes := s.prepareCommand(byte(0x80+mode), 4, index)
+func (s *Satel) ArmPartition(mode, partition int) error {
+	bytes := s.prepareCommand(byte(0x80+mode), 4, partition)
 	return s.sendCmdWithResultCheck(bytes)
 }
 
-func (s *Satel) ForceArmPartition(mode, index int) error {
-	bytes := s.prepareCommand(byte(0xA0+mode), 4, index)
+func (s *Satel) ForceArmPartition(mode, partition int) error {
+	bytes := s.prepareCommand(byte(0xA0+mode), 4, partition)
 	return s.sendCmdWithResultCheck(bytes)
 }
 
-func (s *Satel) DisarmPartition(index int) error {
-	bytes := s.prepareCommand(byte(0x84), 4, index)
+func (s *Satel) DisarmPartition(partition int) error {
+	bytes := s.prepareCommand(byte(0x84), 4, partition)
 	return s.sendCmdWithResultCheck(bytes)
 }
 
@@ -265,6 +265,8 @@ func (s *Satel) ClearTroubleMemory() error {
 }
 
 func (s *Satel) prepareCommand(cmd byte, cmdSize int, index int) []byte {
+	// Substracting 1 from index since Satel indexes from 0.
+	index = index - 1
 	data := make([]byte, cmdSize)
 	data[index/8] = 1 << (index % 8)
 	bytes := append([]byte{cmd}, s.usercode...)
@@ -336,7 +338,7 @@ func (s *Satel) read() {
 
 					handleChange := handlerFunc(s.handler, StateType(cmd))
 					if !s.closing.Load() {
-						// Adding 1 to index since Satel device index starts at 1 instead of 0.
+						// Adding 1 to index since Satel indexes from 0.
 						handleChange(((i * 8) + j + 1), bb&index != 0, !c.initialized)
 					}
 				}
