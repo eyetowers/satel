@@ -265,7 +265,7 @@ func (s *Satel) ClearTroubleMemory() error {
 }
 
 func (s *Satel) prepareCommand(cmd byte, cmdSize int, index int) []byte {
-	// Substracting 1 from index since Satel device index starts at 1 instead of 0.
+	// Substracting 1 from index since Satel indexes from 0.
 	index = index - 1
 	data := make([]byte, cmdSize)
 	data[index/8] = 1 << (index % 8)
@@ -338,7 +338,7 @@ func (s *Satel) read() {
 
 					handleChange := handlerFunc(s.handler, StateType(cmd))
 					if !s.closing.Load() {
-						// Adding 1 to index since Satel device index starts at 1 instead of 0.
+						// Adding 1 to index since Satel indexes from 0.
 						handleChange(((i * 8) + j + 1), bb&index != 0, !c.initialized)
 					}
 				}
