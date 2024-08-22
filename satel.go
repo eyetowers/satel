@@ -61,7 +61,6 @@ type Partition struct {
 func New(address, usercode string, h Handler) (*Satel, error) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
-		conn.Close()
 		return nil, fmt.Errorf("connection to %s failed with error: %w", address, err)
 	}
 
