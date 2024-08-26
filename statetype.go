@@ -26,7 +26,7 @@ const (
 	PartitionFireAlarm
 	PartitionAlarmMemory
 	PartitionFireAlarmMemory
-	Output
+	OutputState
 	DoorOpened
 	DoorOpenedLong
 	StatusBit
@@ -69,7 +69,7 @@ func (c StateType) String() string {
 		"partition-fire-alarm",
 		"partition-alarm-memory",
 		"partition-fire-alarm-memory",
-		"output",
+		"output-state",
 		"doors-opened",
 		"doors-opened-long",
 		"status-bit",

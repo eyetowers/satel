@@ -87,3 +87,10 @@ func decodeZone(data []byte) (byte, uint64, string, uint64) {
 	partition := data[len(data)-1]
 	return deviceType, uint64(zoneID), strings.TrimSpace(name), uint64(partition)
 }
+
+func decodeOutput(data []byte) (byte, uint64, string) {
+	deviceType := data[0]
+	outputID := data[1]
+	name := string(data[3:])
+	return deviceType, uint64(outputID), strings.TrimSpace(name)
+}
