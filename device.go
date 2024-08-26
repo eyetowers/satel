@@ -39,7 +39,7 @@ func (d device) String() string {
 	return devices[d]
 }
 
-func decodeDeviceInfo(data ...byte) (string, string, error) {
+func decodeSatelDeviceInfo(data ...byte) (string, string, error) {
 	if len(data) != 14 {
 		return "", "", fmt.Errorf("failed to decode device info %w", ErrCorruptedResponse)
 	}

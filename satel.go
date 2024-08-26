@@ -18,15 +18,16 @@ var ErrTimeout = errors.New("timeout (3 seconds), no response")
 var ErrNoConnection = errors.New("no connection")
 var ErrReturnResponse = errors.New("failed returning response. unexpectly buffer full")
 var ErrProtocolViolation = errors.New("response violates protocol")
+var ErrDeviceNotFound = errors.New("requested device not found")
 
 const (
 	KeepAliveInterval = 5 * time.Second
 	CmdTimeout        = 3 * time.Second
 
-	ResponseStatusCmd = byte(0xEF)
-	VersionStatusCmd  = byte(0x7E)
-	DeviceInfoCmd     = byte(0x7E)
-	ReadDeviceCmd     = byte(0xEE)
+	ResponseStatusCmd  = byte(0xEF)
+	VersionStatusCmd   = byte(0x7E)
+	SatelDeviceInfoCmd = byte(0x7E)
+	ReadDeviceCmd      = byte(0xEE)
 )
 
 type Satel struct {
@@ -58,10 +59,14 @@ type Partition struct {
 	Name string
 }
 
+type Output struct {
+	ID   uint64
+	Name string
+}
+
 func New(address, usercode string, h Handler) (*Satel, error) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
-		conn.Close()
 		return nil, fmt.Errorf("connection to %s failed with error: %w", address, err)
 	}
 
@@ -86,7 +91,7 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 
 	go s.read()
 
-	model, version, err := s.getDeviceInfo()
+	model, version, err := s.getSatelDeviceInfo()
 	if err != nil {
 		s.Close()
 		return nil, err
@@ -102,7 +107,8 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 
 func (s *Satel) keepConnectionAlive() {
 	for {
-		_, err := s.sendCmd(DeviceInfoCmd)
+		// Sending this random command just to keep the connection alive.
+		_, err := s.sendCmd(SatelDeviceInfoCmd)
 		if err != nil {
 			fmt.Println(err.Error())
 			return
@@ -111,38 +117,79 @@ func (s *Satel) keepConnectionAlive() {
 	}
 }
 
-func (s *Satel) GetZones() ([]Zone, error) {
+func (s *Satel) getDeviceName(deviceType byte, deviceID int, expectedResposeSize int) (*Response, error) {
+	resp, err := s.sendCmd(ReadDeviceCmd, deviceType, byte(deviceID))
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.cmd != ReadDeviceCmd && resp.cmd != ResponseStatusCmd {
+		return nil, fmt.Errorf("getting device(%d) information, response does not match the command: %w",
+			deviceID, ErrProtocolViolation,
+		)
+	}
+
+	if resp.cmd == ResponseStatusCmd {
+		// When error is "Other Error" that means requested device is not found in Satel.
+		if resp.status == OtherError {
+			return nil, ErrDeviceNotFound
+		}
+		return nil, fmt.Errorf("unexpected response status while getting device name(%d) : %w",
+			deviceID, ErrProtocolViolation)
+	}
+
+	if len(resp.data) != expectedResposeSize {
+		return nil, fmt.Errorf("unexpected payload size, expected %dB, actual %dB: %w",
+			expectedResposeSize, len(resp.data), ErrProtocolViolation)
+	}
+	return resp, nil
+}
+
+func (s *Satel) GetOutputs() ([]Output, error) {
 	// TODO @tsaikat: need to dynamically select possible zones.
-	possibleZones := 32
-	cmd := ReadDeviceCmd
-	zoneDevice := byte(0x05)
-	expectedResposeSize := 20
+	poissibleOutputs := 32
+	outputDevice := byte(0x04)
+	expectedResposeSize := 19
+	var outputs []Output
 
-	var zones []Zone
-	partitions := make(map[uint64]Partition)
-	for i := 1; i < possibleZones; i++ {
-		resp, err := s.sendCmd(cmd, zoneDevice, byte(i))
-		if err != nil {
-			return nil, err
+	for i := 1; i < poissibleOutputs; i++ {
+		resp, err := s.getDeviceName(outputDevice, i, expectedResposeSize)
+		if err != nil && err != ErrDeviceNotFound {
+			return nil, fmt.Errorf("getting output device(%d) name: %w", i, err)
 		}
-
-		if resp.cmd != cmd && resp.cmd != ResponseStatusCmd {
-			return nil, fmt.Errorf("getting zone(%d) information, response does not match the command: %w",
-				i, ErrProtocolViolation,
-			)
-		}
-
-		if resp.cmd == ResponseStatusCmd {
-			if !resp.status.IsError() {
-				return nil, fmt.Errorf("response status must be an error while getting zone (%d) : %w", i, ErrProtocolViolation)
-			}
+		if err == ErrDeviceNotFound {
 			continue
 		}
 
-		if len(resp.data) != expectedResposeSize {
-			return nil, fmt.Errorf("mismatch in zone(%d) information payload size, expected %dB, actual %dB: %w",
-				i, expectedResposeSize, len(resp.data), ErrProtocolViolation,
-			)
+		deviceType, outputID, outputName := decodeOutput(resp.data)
+		if outputDevice != deviceType {
+			return nil, fmt.Errorf("getting output(%d) information, received response is not for output: %w", outputID, ErrProtocolViolation)
+		}
+
+		output := Output{
+			ID:   outputID,
+			Name: outputName,
+		}
+		outputs = append(outputs, output)
+	}
+	return outputs, nil
+}
+
+func (s *Satel) GetZones() ([]Zone, error) {
+	// TODO @tsaikat: need to dynamically select possible zones.
+	possibleZones := 32
+	zoneDevice := byte(0x05)
+	expectedResposeSize := 20
+	var zones []Zone
+
+	partitions := make(map[uint64]Partition)
+	for i := 1; i < possibleZones; i++ {
+		resp, err := s.getDeviceName(zoneDevice, i, expectedResposeSize)
+		if err != nil && err != ErrDeviceNotFound {
+			return nil, fmt.Errorf("getting zone(%d) name: %w", i, err)
+		}
+		if err == ErrDeviceNotFound {
+			continue
 		}
 
 		deviceType, zoneID, name, partitionID := decodeZone(resp.data)
@@ -169,29 +216,12 @@ func (s *Satel) GetZones() ([]Zone, error) {
 }
 
 func (s *Satel) getPartition(partition uint64) (Partition, error) {
-	cmd := ReadDeviceCmd
 	partitionDevice := byte(0x00)
 	expectedResposeSize := 19
 
-	resp, err := s.sendCmd(cmd, partitionDevice, byte(partition))
+	resp, err := s.getDeviceName(partitionDevice, int(partition), expectedResposeSize)
 	if err != nil {
-		return Partition{}, err
-	}
-
-	if resp.cmd != cmd && resp.cmd != ResponseStatusCmd {
-		return Partition{}, fmt.Errorf("getting partition(%d) information, response does not match the command: %w",
-			partition, ErrProtocolViolation,
-		)
-	}
-
-	if resp.cmd == ResponseStatusCmd {
-		return Partition{}, fmt.Errorf("response status must be an error while getting partition (%d) : %w", partition, ErrProtocolViolation)
-	}
-
-	if len(resp.data) != expectedResposeSize {
-		return Partition{}, fmt.Errorf("mismatch in partition (%d) information payload size, expected %dB, actual %dB: %w",
-			partition, expectedResposeSize, len(resp.data), ErrProtocolViolation,
-		)
+		return Partition{}, fmt.Errorf("getting partition(%d) name: %w", partition, err)
 	}
 
 	deviceType, partitionID, partitionName := decodePartition(resp.data)
@@ -416,10 +446,10 @@ func (s *Satel) sendCmdWithResultCheck(data []byte) error {
 	return nil
 }
 
-func (s *Satel) getDeviceInfo() (string, string, error) {
-	resp, err := s.sendCmd(DeviceInfoCmd)
+func (s *Satel) getSatelDeviceInfo() (string, string, error) {
+	resp, err := s.sendCmd(SatelDeviceInfoCmd)
 	if err != nil {
 		return "", "", err
 	}
-	return decodeDeviceInfo(resp.data...)
+	return decodeSatelDeviceInfo(resp.data...)
 }
