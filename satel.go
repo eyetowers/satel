@@ -107,7 +107,8 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 
 func (s *Satel) keepConnectionAlive() {
 	for {
-		_, err := s.sendCmd(SatelDeviceInfoCmd) // Sending this random command just to keep the connection alive.
+		// Sending this random command just to keep the connection alive.
+		_, err := s.sendCmd(SatelDeviceInfoCmd)
 		if err != nil {
 			fmt.Println(err.Error())
 			return
@@ -129,7 +130,7 @@ func (s *Satel) getDeviceName(deviceType byte, deviceID int, expectedResposeSize
 	}
 
 	if resp.cmd == ResponseStatusCmd {
-		// When error is "Other Error" that means request device is not found in Satel.
+		// When error is "Other Error" that means requested device is not found in Satel.
 		if resp.status == OtherError {
 			return nil, ErrDeviceNotFound
 		}
