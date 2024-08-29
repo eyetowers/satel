@@ -31,15 +31,15 @@ const (
 )
 
 type Satel struct {
-	conn     net.Conn
-	usercode []byte
-	mu       sync.Mutex
-	cmdSize  int
-
-	responseChan chan Response
-	handler      Handler
-	closing      atomic.Bool
-	done         chan bool
+	conn               net.Conn
+	usercode           []byte
+	mu                 sync.Mutex
+	cmdSize            int
+	zoneOutputCapacity uint64
+	responseChan       chan Response
+	handler            Handler
+	closing            atomic.Bool
+	done               chan bool
 }
 
 type Response struct {
@@ -81,12 +81,13 @@ func New(address, usercode string, h Handler) (*Satel, error) {
 
 func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 	s := &Satel{
-		conn:         conn,
-		usercode:     transformCode(usercode),
-		responseChan: make(chan Response),
-		handler:      h,
-		cmdSize:      16,
-		done:         make(chan bool),
+		conn:               conn,
+		usercode:           transformCode(usercode),
+		responseChan:       make(chan Response),
+		handler:            h,
+		cmdSize:            16,
+		zoneOutputCapacity: 0,
+		done:               make(chan bool),
 	}
 
 	go s.read()
@@ -96,9 +97,16 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 		s.Close()
 		return nil, err
 	}
-	if version[0] == '2' && model == INTEGRA256Plus.String() {
-		s.cmdSize = 32
+	if version[0] == '2' && model == INTEGRA256Plus {
+		s.Close()
+		return nil, fmt.Errorf("satel device model %q not yet supported", model.String())
 	}
+
+	if model.ZoneAndOutputCapacity() == 0 {
+		s.Close()
+		return nil, fmt.Errorf("satel device model not recognized")
+	}
+	s.zoneOutputCapacity = model.ZoneAndOutputCapacity()
 
 	go s.keepConnectionAlive()
 
@@ -146,13 +154,12 @@ func (s *Satel) getDeviceName(deviceType byte, deviceID int, expectedResposeSize
 }
 
 func (s *Satel) GetOutputs() ([]Output, error) {
-	// TODO @tsaikat: need to dynamically select possible zones.
-	poissibleOutputs := 32
+	supportedOutputs := int(s.zoneOutputCapacity)
 	outputDevice := byte(0x04)
 	expectedResposeSize := 19
 	var outputs []Output
 
-	for i := 1; i < poissibleOutputs; i++ {
+	for i := 1; i < supportedOutputs; i++ {
 		resp, err := s.getDeviceName(outputDevice, i, expectedResposeSize)
 		if err != nil && err != ErrDeviceNotFound {
 			return nil, fmt.Errorf("getting output device(%d) name: %w", i, err)
@@ -176,14 +183,13 @@ func (s *Satel) GetOutputs() ([]Output, error) {
 }
 
 func (s *Satel) GetZones() ([]Zone, error) {
-	// TODO @tsaikat: need to dynamically select possible zones.
-	possibleZones := 32
+	supportedZones := int(s.zoneOutputCapacity)
 	zoneDevice := byte(0x05)
 	expectedResposeSize := 20
 	var zones []Zone
 
 	partitions := make(map[uint64]Partition)
-	for i := 1; i < possibleZones; i++ {
+	for i := 1; i < supportedZones; i++ {
 		resp, err := s.getDeviceName(zoneDevice, i, expectedResposeSize)
 		if err != nil && err != ErrDeviceNotFound {
 			return nil, fmt.Errorf("getting zone(%d) name: %w", i, err)
@@ -446,10 +452,10 @@ func (s *Satel) sendCmdWithResultCheck(data []byte) error {
 	return nil
 }
 
-func (s *Satel) getSatelDeviceInfo() (string, string, error) {
+func (s *Satel) getSatelDeviceInfo() (device, string, error) {
 	resp, err := s.sendCmd(SatelDeviceInfoCmd)
 	if err != nil {
-		return "", "", err
+		return UnknownDevice, "", err
 	}
 	return decodeSatelDeviceInfo(resp.data...)
 }

@@ -16,10 +16,11 @@ const (
 	INTEGRA64Plus       device = 0x42
 	INTEGRA128Plus      device = 0x43
 	INTEGRA256Plus      device = 0x48
+
+	UnknownDevice device = 255
 )
 
 func (d device) String() string {
-
 	devices := map[device]string{
 		INTEGRA24:           "INTEGRA 24",
 		INTEGRA32:           "INTEGRA 32",
@@ -33,18 +34,34 @@ func (d device) String() string {
 	}
 
 	if devices[d] == "" {
-		return "invalid device"
+		return "Unknown Device"
 	}
 
 	return devices[d]
 }
 
-func decodeSatelDeviceInfo(data ...byte) (string, string, error) {
+func decodeSatelDeviceInfo(data ...byte) (device, string, error) {
 	if len(data) != 14 {
-		return "", "", fmt.Errorf("failed to decode device info %w", ErrCorruptedResponse)
+		return UnknownDevice, "", fmt.Errorf("failed to decode device info %w", ErrCorruptedResponse)
 	}
-	model := device(data[0]).String()
+	model := device(data[0])
 	data = data[1:]
 	version := fmt.Sprintf("%s.%s %s-%s-%s", data[:1], data[1:3], data[3:7], data[7:9], data[9:11])
 	return model, version, nil
+}
+
+func (d device) ZoneAndOutputCapacity() uint64 {
+	devices := map[device]uint64{
+		INTEGRA24:           24,
+		INTEGRA32:           32,
+		INTEGRA64:           64,
+		INTEGRA128:          128,
+		INTEGRA128WRLSIM300: 128,
+		INTEGRA128WRLLEON:   128,
+		INTEGRA64Plus:       64,
+		INTEGRA128Plus:      128,
+		INTEGRA256Plus:      256,
+	}
+
+	return devices[d]
 }
