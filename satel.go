@@ -102,11 +102,11 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 		return nil, fmt.Errorf("satel device model %q not yet supported", model.String())
 	}
 
-	if model.ZoneAndOutputCapacity() == 0 {
+	s.zoneOutputCapacity, err = model.ZoneAndOutputCapacity()
+	if err != nil {
 		s.Close()
-		return nil, fmt.Errorf("satel device model not recognized")
+		return nil, err
 	}
-	s.zoneOutputCapacity = model.ZoneAndOutputCapacity()
 
 	go s.keepConnectionAlive()
 

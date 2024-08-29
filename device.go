@@ -20,24 +20,36 @@ const (
 	UnknownDevice device = 255
 )
 
-func (d device) String() string {
-	devices := map[device]string{
-		INTEGRA24:           "INTEGRA 24",
-		INTEGRA32:           "INTEGRA 32",
-		INTEGRA64:           "INTEGRA 64",
-		INTEGRA128:          "INTEGRA 128",
-		INTEGRA128WRLSIM300: "INTEGRA 128-WRL SIM300",
-		INTEGRA128WRLLEON:   "INTEGRA 128-WRL LEON",
-		INTEGRA64Plus:       "INTEGRA 64 Plus",
-		INTEGRA128Plus:      "INTEGRA 128 Plus",
-		INTEGRA256Plus:      "INTEGRA 256 Plus",
-	}
+var zoneAndOutputCapacity = map[device]uint64{
+	INTEGRA24:           24,
+	INTEGRA32:           32,
+	INTEGRA64:           64,
+	INTEGRA128:          128,
+	INTEGRA128WRLSIM300: 128,
+	INTEGRA128WRLLEON:   128,
+	INTEGRA64Plus:       64,
+	INTEGRA128Plus:      128,
+	INTEGRA256Plus:      256,
+}
 
-	if devices[d] == "" {
+var deviceModels = map[device]string{
+	INTEGRA24:           "INTEGRA 24",
+	INTEGRA32:           "INTEGRA 32",
+	INTEGRA64:           "INTEGRA 64",
+	INTEGRA128:          "INTEGRA 128",
+	INTEGRA128WRLSIM300: "INTEGRA 128-WRL SIM300",
+	INTEGRA128WRLLEON:   "INTEGRA 128-WRL LEON",
+	INTEGRA64Plus:       "INTEGRA 64 Plus",
+	INTEGRA128Plus:      "INTEGRA 128 Plus",
+	INTEGRA256Plus:      "INTEGRA 256 Plus",
+}
+
+func (d device) String() string {
+	if deviceModels[d] == "" {
 		return "Unknown Device"
 	}
 
-	return devices[d]
+	return deviceModels[d]
 }
 
 func decodeSatelDeviceInfo(data ...byte) (device, string, error) {
@@ -50,18 +62,11 @@ func decodeSatelDeviceInfo(data ...byte) (device, string, error) {
 	return model, version, nil
 }
 
-func (d device) ZoneAndOutputCapacity() uint64 {
-	devices := map[device]uint64{
-		INTEGRA24:           24,
-		INTEGRA32:           32,
-		INTEGRA64:           64,
-		INTEGRA128:          128,
-		INTEGRA128WRLSIM300: 128,
-		INTEGRA128WRLLEON:   128,
-		INTEGRA64Plus:       64,
-		INTEGRA128Plus:      128,
-		INTEGRA256Plus:      256,
+func (d device) ZoneAndOutputCapacity() (uint64, error) {
+	value, exists := zoneAndOutputCapacity[d]
+	if !exists {
+		return 0, fmt.Errorf("unknown device, zone and output capacity could not be determained")
 	}
 
-	return devices[d]
+	return value, nil
 }
