@@ -9,6 +9,7 @@ var ErrInvalidChar = errors.New("usercode contains invalid character")
 var ErrInvalidLength = errors.New("usercode does not match the expected length")
 
 const subscribeCmd = 0x7F
+const InactiveOutput = 0x00
 
 func validateUsercode(usercode string) error {
 	if len(usercode) != 4 {
@@ -88,11 +89,16 @@ func decodeZone(data []byte) (byte, uint64, string, uint64) {
 	return deviceType, uint64(zoneID), strings.TrimSpace(name), uint64(partition)
 }
 
-func decodeOutput(data []byte) (byte, uint64, string) {
+func decodeOutput(data []byte) (byte, uint64, uint64, string) {
+	outputFunction := data[2]
+	if outputFunction == InactiveOutput {
+		return 0, 0, uint64(outputFunction), ""
+	}
+
 	deviceType := data[0]
 	outputID := data[1]
 	name := toASCIIString(data[3:])
-	return deviceType, uint64(outputID), strings.TrimSpace(name)
+	return deviceType, uint64(outputID), uint64(outputFunction), strings.TrimSpace(name)
 }
 
 // toASCIIString converts bytes to string but also replaces non standard ASCII

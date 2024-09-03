@@ -168,7 +168,10 @@ func (s *Satel) GetOutputs() ([]Output, error) {
 			continue
 		}
 
-		deviceType, outputID, outputName := decodeOutput(resp.data)
+		deviceType, outputID, outputFunc, outputName := decodeOutput(resp.data)
+		if outputFunc == InactiveOutput {
+			continue
+		}
 		if outputDevice != deviceType {
 			return nil, fmt.Errorf("getting output(%d) information, received response is not for output: %w", outputID, ErrProtocolViolation)
 		}
