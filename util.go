@@ -76,6 +76,7 @@ func decomposePayload(bytes ...byte) (byte, []byte, error) {
 func decodePartition(data []byte) (byte, uint64, string) {
 	deviceType := data[0]
 	partitionID := data[1]
+	// Note: We are currently not handling the function byte.
 	name := toASCIIString(data[3:])
 	return deviceType, uint64(partitionID), strings.TrimSpace(name)
 }
@@ -83,16 +84,18 @@ func decodePartition(data []byte) (byte, uint64, string) {
 func decodeZone(data []byte) (byte, uint64, string, uint64) {
 	deviceType := data[0]
 	zoneID := data[1]
+	// Note: We are currently not handling the function byte.
 	name := toASCIIString(data[3 : len(data)-1])
 	partition := data[len(data)-1]
 	return deviceType, uint64(zoneID), strings.TrimSpace(name), uint64(partition)
 }
 
-func decodeOutput(data []byte) (byte, uint64, string) {
+func decodeOutput(data []byte) (byte, uint64, OutputFunction, string) {
 	deviceType := data[0]
 	outputID := data[1]
+	outputFunction := OutputFunction(data[2])
 	name := toASCIIString(data[3:])
-	return deviceType, uint64(outputID), strings.TrimSpace(name)
+	return deviceType, uint64(outputID), outputFunction, strings.TrimSpace(name)
 }
 
 // toASCIIString converts bytes to string but also replaces non standard ASCII

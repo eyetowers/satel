@@ -60,8 +60,9 @@ type Partition struct {
 }
 
 type Output struct {
-	ID   uint64
-	Name string
+	ID       uint64
+	Name     string
+	Function OutputFunction
 }
 
 func New(address, usercode string, h Handler) (*Satel, error) {
@@ -168,14 +169,15 @@ func (s *Satel) GetOutputs() ([]Output, error) {
 			continue
 		}
 
-		deviceType, outputID, outputName := decodeOutput(resp.data)
+		deviceType, outputID, outputFunc, outputName := decodeOutput(resp.data)
 		if outputDevice != deviceType {
 			return nil, fmt.Errorf("getting output(%d) information, received response is not for output: %w", outputID, ErrProtocolViolation)
 		}
 
 		output := Output{
-			ID:   outputID,
-			Name: outputName,
+			ID:       outputID,
+			Name:     outputName,
+			Function: outputFunc,
 		}
 		outputs = append(outputs, output)
 	}
