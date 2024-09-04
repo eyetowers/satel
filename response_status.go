@@ -20,32 +20,32 @@ const (
 	CommandAccepted           ResponseStatus = 0xFF
 )
 
+var ResponseStatusStrings = map[ResponseStatus]string{
+	Ok:                        "ok",
+	ReqUsercodeNotFound:       "requesting user code not found",
+	NoAccess:                  "no access",
+	SelectedUserNotExist:      "selected user does not exist",
+	SelectedUserAlreadyExists: "selected user already exists",
+	WrongOrDuplicateCode:      "wrong code or code already exists",
+	TelephoneCodeExists:       "telephone code already exists",
+	ChangedCodeSame:           "changed code is the same",
+	OtherError:                "other error",
+	CannotArmButForceArm:      "can not arm, but can use force arm",
+	CannotArm:                 "can not arm",
+	OtherErrors:               "other errors",
+	CommandAccepted:           "command accepted (data length and CRC OK), will be processed",
+}
+
 func (r ResponseStatus) String() string {
 	if r >= 0x80 && r <= 0x8F {
 		return fmt.Sprintf("other errors 0x%02X", byte(r))
 	}
 
-	strings := map[ResponseStatus]string{
-		Ok:                        "ok",
-		ReqUsercodeNotFound:       "requesting user code not found",
-		NoAccess:                  "no access",
-		SelectedUserNotExist:      "selected user does not exist",
-		SelectedUserAlreadyExists: "selected user already exists",
-		WrongOrDuplicateCode:      "wrong code or code already exists",
-		TelephoneCodeExists:       "telephone code already exists",
-		ChangedCodeSame:           "changed code is the same",
-		OtherError:                "other error",
-		CannotArmButForceArm:      "can not arm, but can use force arm",
-		CannotArm:                 "can not arm",
-		OtherErrors:               "other errors",
-		CommandAccepted:           "command accepted (data length and CRC OK), will be processed",
-	}
-
-	if strings[r] == "" {
+	if ResponseStatusStrings[r] == "" {
 		return "invalid response code"
 	}
 
-	return strings[r]
+	return ResponseStatusStrings[r]
 }
 
 func (r ResponseStatus) IsError() bool {
