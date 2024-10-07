@@ -25,7 +25,6 @@ const (
 	CmdTimeout        = 3 * time.Second
 
 	ResponseStatusCmd  = byte(0xEF)
-	VersionStatusCmd   = byte(0x7E)
 	SatelDeviceInfoCmd = byte(0x7E)
 	ReadDeviceCmd      = byte(0xEE)
 )
@@ -36,10 +35,12 @@ type Satel struct {
 	mu                 sync.Mutex
 	cmdSize            int
 	zoneOutputCapacity uint64
-	responseChan       chan Response
-	handler            Handler
-	closing            atomic.Bool
-	done               chan bool
+	deviceLanguage     language
+
+	responseChan chan Response
+	handler      Handler
+	closing      atomic.Bool
+	done         chan bool
 }
 
 type Response struct {
@@ -93,7 +94,7 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 
 	go s.read()
 
-	model, version, err := s.getSatelDeviceInfo()
+	model, version, language, err := s.getSatelDeviceInfo()
 	if err != nil {
 		s.Close()
 		return nil, err
@@ -109,6 +110,7 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 		return nil, err
 	}
 
+	s.deviceLanguage = language
 	go s.keepConnectionAlive()
 
 	return s, nil
@@ -169,7 +171,7 @@ func (s *Satel) GetOutputs() ([]Output, error) {
 			continue
 		}
 
-		deviceType, outputID, outputFunc, outputName := decodeOutput(resp.data)
+		deviceType, outputID, outputFunc, outputName := decodeOutput(resp.data, s.deviceLanguage)
 		if outputDevice != deviceType {
 			return nil, fmt.Errorf("getting output(%d) information, received response is not for output: %w", outputID, ErrProtocolViolation)
 		}
@@ -200,7 +202,7 @@ func (s *Satel) GetZones() ([]Zone, error) {
 			continue
 		}
 
-		deviceType, zoneID, name, partitionID := decodeZone(resp.data)
+		deviceType, zoneID, name, partitionID := decodeZone(resp.data, s.deviceLanguage)
 		if zoneDevice != deviceType {
 			return nil, fmt.Errorf("getting zone(%d) information, received response is not for zone: %w", i, ErrProtocolViolation)
 		}
@@ -232,7 +234,7 @@ func (s *Satel) getPartition(partition uint64) (Partition, error) {
 		return Partition{}, fmt.Errorf("getting partition(%d) name: %w", partition, err)
 	}
 
-	deviceType, partitionID, partitionName := decodePartition(resp.data)
+	deviceType, partitionID, partitionName := decodePartition(resp.data, s.deviceLanguage)
 	if partitionDevice != deviceType {
 		return Partition{}, fmt.Errorf("getting partition(%d) information, received response is not for partition: %w", partition, ErrProtocolViolation)
 	}
@@ -358,7 +360,7 @@ func (s *Satel) read() {
 			break
 		}
 
-		if cmd == ResponseStatusCmd || cmd == VersionStatusCmd || cmd == ReadDeviceCmd {
+		if cmd == ResponseStatusCmd || cmd == SatelDeviceInfoCmd || cmd == ReadDeviceCmd {
 			s.returnResponse(cmd, data...)
 			continue
 		}
@@ -454,10 +456,10 @@ func (s *Satel) sendCmdWithResultCheck(data []byte) error {
 	return nil
 }
 
-func (s *Satel) getSatelDeviceInfo() (device, string, error) {
+func (s *Satel) getSatelDeviceInfo() (device, string, language, error) {
 	resp, err := s.sendCmd(SatelDeviceInfoCmd)
 	if err != nil {
-		return UnknownDevice, "", err
+		return UnknownDevice, "", UnspecifiedLanguage, err
 	}
 	return decodeSatelDeviceInfo(resp.data...)
 }
