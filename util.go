@@ -1,8 +1,14 @@
 package satel
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"strings"
+
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/encoding/unicode"
 )
 
 var ErrInvalidChar = errors.New("usercode contains invalid character")
@@ -73,38 +79,71 @@ func decomposePayload(bytes ...byte) (byte, []byte, error) {
 	return cmd, data, nil
 }
 
-func decodePartition(data []byte) (byte, uint64, string) {
+func decodePartition(data []byte, lang language) (byte, uint64, string) {
 	deviceType := data[0]
 	partitionID := data[1]
 	// Note: We are currently not handling the function byte.
-	name := toASCIIString(data[3:])
-	return deviceType, uint64(partitionID), strings.TrimSpace(name)
+	name := decodeString(data[3:], lang)
+	return deviceType, uint64(partitionID), name
 }
 
-func decodeZone(data []byte) (byte, uint64, string, uint64) {
+func decodeZone(data []byte, lang language) (byte, uint64, string, uint64) {
 	deviceType := data[0]
 	zoneID := data[1]
 	// Note: We are currently not handling the function byte.
-	name := toASCIIString(data[3 : len(data)-1])
+	name := decodeString(data[3:len(data)-1], lang)
 	partition := data[len(data)-1]
-	return deviceType, uint64(zoneID), strings.TrimSpace(name), uint64(partition)
+	return deviceType, uint64(zoneID), name, uint64(partition)
 }
 
-func decodeOutput(data []byte) (byte, uint64, OutputFunction, string) {
+func decodeOutput(data []byte, lang language) (byte, uint64, OutputFunction, string) {
 	deviceType := data[0]
 	outputID := data[1]
 	outputFunction := OutputFunction(data[2])
-	name := toASCIIString(data[3:])
-	return deviceType, uint64(outputID), outputFunction, strings.TrimSpace(name)
+	name := decodeString(data[3:], lang)
+	return deviceType, uint64(outputID), outputFunction, name
 }
 
-// toASCIIString converts bytes to string but also replaces non standard ASCII
-// characters with '?'.
-func toASCIIString(data []byte) string {
+func decodeString(data []byte, language language) string {
+	reader := transformReader(bytes.NewReader(data), language)
+	decodedData, err := io.ReadAll(reader)
+	if err != nil {
+		// If we encounter an error, force the string into Ascii only characters.
+		decodedData = toAscii(data)
+	}
+
+	return strings.TrimSpace(string(decodedData))
+}
+
+var languangeEncodings = map[language]encoding.Encoding{
+	// Central european languages.
+	Czech:     charmap.Windows1250,
+	Slovakian: charmap.Windows1250,
+	Polish:    charmap.Windows1250,
+
+	// Western european languages.
+	German:  charmap.Windows1252,
+	French:  charmap.Windows1252,
+	Spanish: charmap.Windows1252,
+
+	// TODO: List default encodings for other languages.
+}
+
+func transformReader(r io.Reader, l language) io.Reader {
+	enc, ok := languangeEncodings[l]
+	if !ok {
+		return unicode.UTF8.NewDecoder().Reader(r)
+	}
+	return enc.NewDecoder().Reader(r)
+}
+
+// toAscii returns bytes with all non standard ASCII characters replaced with '?'.
+func toAscii(data []byte) []byte {
+	result := make([]byte, len(data))
 	for i, b := range data {
 		if b < 0x20 || b > 0x7E {
 			data[i] = '?'
 		}
 	}
-	return string(data)
+	return result
 }
