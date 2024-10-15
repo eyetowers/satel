@@ -9,7 +9,6 @@ import (
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/unicode"
-	"golang.org/x/text/transform"
 )
 
 var ErrInvalidChar = errors.New("usercode contains invalid character")
@@ -106,27 +105,45 @@ func decodeOutput(data []byte, lang language) (byte, uint64, OutputFunction, str
 }
 
 func decodeString(data []byte, language language) string {
-	var enc encoding.Encoding
-
-	switch language {
-	case Czech:
-		enc = charmap.Windows1252
-	// TODO: Add other languages.
-	default:
-		enc = unicode.UTF8
-	}
-
-	transformer := enc.NewDecoder()
-	decodedData, err := io.ReadAll(transform.NewReader(bytes.NewReader(data), transformer))
+	reader := transformReader(bytes.NewReader(data), language)
+	decodedData, err := io.ReadAll(reader)
 	if err != nil {
-		// If we encounter an error, manually replace the problmatic char with '?'.
-		for i, b := range data {
-			if b < 0x20 || b > 0x7E {
-				data[i] = '?'
-			}
-		}
-		decodedData = data
+		// If we encounter an error, force the string into Ascii only characters.
+		decodedData = toAscii(data)
 	}
 
 	return strings.TrimSpace(string(decodedData))
+}
+
+var languangeEncodings = map[language]encoding.Encoding{
+	// Central european languages.
+	Czech:     charmap.Windows1250,
+	Slovakian: charmap.Windows1250,
+	Polish:    charmap.Windows1250,
+
+	// Western european languages.
+	German:  charmap.Windows1252,
+	French:  charmap.Windows1252,
+	Spanish: charmap.Windows1252,
+
+	// TODO: List default encodings for other languages.
+}
+
+func transformReader(r io.Reader, l language) io.Reader {
+	enc, ok := languangeEncodings[l]
+	if !ok {
+		return unicode.UTF8.NewDecoder().Reader(r)
+	}
+	return enc.NewDecoder().Reader(r)
+}
+
+// toAscii returns bytes with all non standard ASCII characters replaced with '?'.
+func toAscii(data []byte) []byte {
+	result := make([]byte, len(data))
+	for i, b := range data {
+		if b < 0x20 || b > 0x7E {
+			data[i] = '?'
+		}
+	}
+	return result
 }
