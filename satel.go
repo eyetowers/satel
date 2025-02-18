@@ -451,7 +451,7 @@ func (s *Satel) sendCmdWithResultCheck(data []byte) error {
 		)
 	}
 	if resp.status.IsError() {
-		return fmt.Errorf(resp.status.String())
+		return errors.New(resp.status.String())
 	}
 	return nil
 }
