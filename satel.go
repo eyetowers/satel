@@ -16,7 +16,7 @@ var ErrCrcNotMatch = errors.New("corrupt response: crc does not match")
 var ErrCorruptedResponse = errors.New("corrupted response: does not match the documentation")
 var ErrForbiddenCommand = errors.New("forbidden command value")
 var ErrNoConnection = errors.New("no connection")
-var ErrReturnResponse = errors.New("failed returning response. unexpectly no receiver available")
+var ErrReturnResponse = errors.New("failed returning response, unexpectly no caller available")
 var ErrProtocolViolation = errors.New("response violates protocol")
 var ErrDeviceNotFound = errors.New("requested device not found")
 var ErrTimeout = fmt.Errorf("timeout (%s), no response", CmdTimeout.String())
@@ -77,7 +77,7 @@ func New(address, usercode string, h Handler) (*Satel, error) {
 	err = validateUsercode(usercode)
 	if err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("failed validating usercode: %w", err)
+		return nil, fmt.Errorf("validating usercode: %w", err)
 	}
 
 	return newConfig(conn, usercode, h)
@@ -132,7 +132,7 @@ func (s *Satel) keepConnectionAlive() {
 func (s *Satel) getDeviceName(deviceType byte, deviceID int, expectedResposeSize int) (*Response, error) {
 	resp, err := s.sendCmd(ReadDeviceCmd, deviceType, byte(deviceID))
 	if err != nil {
-		return nil, fmt.Errorf("failed getting device (ID: %d) name : %w", deviceID, err)
+		return nil, fmt.Errorf("getting device (ID: %d) name : %w", deviceID, err)
 	}
 
 	if resp.cmd != ReadDeviceCmd && resp.cmd != ResponseStatusCmd {
@@ -452,7 +452,7 @@ func (s *Satel) sendCmdWithResultCheck(data []byte) error {
 		)
 	}
 	if resp.status.IsError() {
-		return fmt.Errorf("error response status received : %v", resp.status.String())
+		return fmt.Errorf("error response status received %q", resp.status)
 	}
 	return nil
 }
