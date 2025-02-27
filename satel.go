@@ -15,19 +15,19 @@ var ErrDisconnected = errors.New("disconnected")
 var ErrCrcNotMatch = errors.New("corrupt response: crc does not match")
 var ErrCorruptedResponse = errors.New("corrupted response: does not match the documentation")
 var ErrForbiddenCommand = errors.New("forbidden command value")
-var ErrTimeout = errors.New(fmt.Sprintf("timeout (%s), no response", CmdTimeout.String()))
 var ErrNoConnection = errors.New("no connection")
 var ErrReturnResponse = errors.New("failed returning response. unexpectly no receiver available")
 var ErrProtocolViolation = errors.New("response violates protocol")
 var ErrDeviceNotFound = errors.New("requested device not found")
+var ErrTimeout = fmt.Errorf("timeout (%s), no response", CmdTimeout.String())
 
 const (
-	KeepAliveInterval = 20 * time.Second
+	KeepAliveInterval = 24 * time.Second
 	CmdTimeout        = 10 * time.Second
 
 	ResponseStatusCmd  = byte(0xEF)
 	SatelDeviceInfoCmd = byte(0x7E)
-	SatelDeviceVersion = byte(0x7C)
+	SatelDeviceVersion = byte(0xFE)
 	ReadDeviceCmd      = byte(0xEE)
 )
 
