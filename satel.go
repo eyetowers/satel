@@ -22,12 +22,12 @@ var ErrDeviceNotFound = errors.New("requested device not found")
 var ErrTimeout = fmt.Errorf("timeout (%s), no response", CmdTimeout.String())
 
 const (
-	KeepAliveInterval = 24 * time.Second
+	KeepAliveInterval = 20 * time.Second
 	CmdTimeout        = 10 * time.Second
 
 	ResponseStatusCmd  = byte(0xEF)
 	SatelDeviceInfoCmd = byte(0x7E)
-	SatelDeviceVersion = byte(0xFE)
+	SatelDeviceVersion = byte(0x7C)
 	ReadDeviceCmd      = byte(0xEE)
 )
 
