@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -14,18 +15,19 @@ var ErrDisconnected = errors.New("disconnected")
 var ErrCrcNotMatch = errors.New("corrupt response: crc does not match")
 var ErrCorruptedResponse = errors.New("corrupted response: does not match the documentation")
 var ErrForbiddenCommand = errors.New("forbidden command value")
-var ErrTimeout = errors.New("timeout (3 seconds), no response")
+var ErrTimeout = errors.New(fmt.Sprintf("timeout (%s), no response", CmdTimeout.String()))
 var ErrNoConnection = errors.New("no connection")
-var ErrReturnResponse = errors.New("failed returning response. unexpectly buffer full")
+var ErrReturnResponse = errors.New("failed returning response. unexpectly no receiver available")
 var ErrProtocolViolation = errors.New("response violates protocol")
 var ErrDeviceNotFound = errors.New("requested device not found")
 
 const (
-	KeepAliveInterval = 5 * time.Second
-	CmdTimeout        = 3 * time.Second
+	KeepAliveInterval = 20 * time.Second
+	CmdTimeout        = 10 * time.Second
 
 	ResponseStatusCmd  = byte(0xEF)
 	SatelDeviceInfoCmd = byte(0x7E)
+	SatelDeviceVersion = byte(0x7C)
 	ReadDeviceCmd      = byte(0xEE)
 )
 
@@ -75,7 +77,7 @@ func New(address, usercode string, h Handler) (*Satel, error) {
 	err = validateUsercode(usercode)
 	if err != nil {
 		conn.Close()
-		return nil, err
+		return nil, fmt.Errorf("failed validating usercode: %w", err)
 	}
 
 	return newConfig(conn, usercode, h)
@@ -97,7 +99,7 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 	model, version, language, err := s.getSatelDeviceInfo()
 	if err != nil {
 		s.Close()
-		return nil, err
+		return nil, fmt.Errorf("getting satel device info : %w", err)
 	}
 	if version[0] == '2' && model == INTEGRA256Plus {
 		s.Close()
@@ -107,7 +109,7 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 	s.zoneOutputCapacity, err = model.ZoneAndOutputCapacity()
 	if err != nil {
 		s.Close()
-		return nil, err
+		return nil, fmt.Errorf("getting zone and output capacity : %w", err)
 	}
 
 	s.deviceLanguage = language
@@ -119,10 +121,9 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 func (s *Satel) keepConnectionAlive() {
 	for {
 		// Sending this random command just to keep the connection alive.
-		_, err := s.sendCmd(SatelDeviceInfoCmd)
+		_, err := s.sendCmd(SatelDeviceVersion)
 		if err != nil {
-			fmt.Println(err.Error())
-			return
+			log.Println("Error while keeping connection alive: %w", err)
 		}
 		time.Sleep(KeepAliveInterval)
 	}
@@ -131,7 +132,7 @@ func (s *Satel) keepConnectionAlive() {
 func (s *Satel) getDeviceName(deviceType byte, deviceID int, expectedResposeSize int) (*Response, error) {
 	resp, err := s.sendCmd(ReadDeviceCmd, deviceType, byte(deviceID))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed getting device (ID: %d) name : %w", deviceID, err)
 	}
 
 	if resp.cmd != ReadDeviceCmd && resp.cmd != ResponseStatusCmd {
@@ -317,7 +318,7 @@ func (s *Satel) Close() error {
 	s.closing.Store(true)
 	err := s.conn.Close()
 	<-s.done
-	return err
+	return fmt.Errorf("closing satel connection: %w", err)
 }
 
 func (s *Satel) closeRead() {
@@ -360,7 +361,7 @@ func (s *Satel) read() {
 			break
 		}
 
-		if cmd == ResponseStatusCmd || cmd == SatelDeviceInfoCmd || cmd == ReadDeviceCmd {
+		if cmd == ResponseStatusCmd || cmd == SatelDeviceInfoCmd || cmd == SatelDeviceVersion || cmd == ReadDeviceCmd {
 			s.returnResponse(cmd, data...)
 			continue
 		}
@@ -426,7 +427,7 @@ func (s *Satel) sendCmd(data ...byte) (*Response, error) {
 	}
 	_, err := s.conn.Write(frame(data...))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("sending command : %w", err)
 	}
 
 	select {
@@ -442,7 +443,7 @@ func (s *Satel) sendCmd(data ...byte) (*Response, error) {
 func (s *Satel) sendCmdWithResultCheck(data []byte) error {
 	resp, err := s.sendCmd(data...)
 	if err != nil {
-		return err
+		return fmt.Errorf("sending command: %w", err)
 	}
 
 	if resp.cmd != ResponseStatusCmd {
@@ -451,7 +452,7 @@ func (s *Satel) sendCmdWithResultCheck(data []byte) error {
 		)
 	}
 	if resp.status.IsError() {
-		return errors.New(resp.status.String())
+		return fmt.Errorf("error response status received : %v", resp.status.String())
 	}
 	return nil
 }
@@ -459,7 +460,7 @@ func (s *Satel) sendCmdWithResultCheck(data []byte) error {
 func (s *Satel) getSatelDeviceInfo() (device, string, language, error) {
 	resp, err := s.sendCmd(SatelDeviceInfoCmd)
 	if err != nil {
-		return UnknownDevice, "", UnspecifiedLanguage, err
+		return UnknownDevice, "", UnspecifiedLanguage, fmt.Errorf("getting satel device info: %w", err)
 	}
 	return decodeSatelDeviceInfo(resp.data...)
 }
