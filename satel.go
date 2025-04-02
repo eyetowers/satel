@@ -261,8 +261,20 @@ func (s *Satel) ArmPartition(mode, partition int) error {
 	return s.sendCmdWithResultCheck(bytes)
 }
 
+func (s *Satel) ArmPartitionNoDelay(mode, partition int) error {
+	bytes := s.prepareCommand(byte(0x80+mode), 4, partition)
+	bytes = append(bytes, 0x80)
+	return s.sendCmdWithResultCheck(bytes)
+}
+
 func (s *Satel) ForceArmPartition(mode, partition int) error {
 	bytes := s.prepareCommand(byte(0xA0+mode), 4, partition)
+	return s.sendCmdWithResultCheck(bytes)
+}
+
+func (s *Satel) ForceArmPartitionNoDelay(mode, partition int) error {
+	bytes := s.prepareCommand(byte(0xA0+mode), 4, partition)
+	bytes = append(bytes, 0x80)
 	return s.sendCmdWithResultCheck(bytes)
 }
 
