@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -123,7 +122,8 @@ func (s *Satel) keepConnectionAlive() {
 		// Sending this random command just to keep the connection alive.
 		_, err := s.sendCmd(SatelDeviceVersion)
 		if err != nil {
-			log.Println("Error while keeping connection alive", err)
+			s.reportError(fmt.Errorf("keeping connection alive: %w", err))
+			return
 		}
 		time.Sleep(KeepAliveInterval)
 	}
