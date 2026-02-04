@@ -75,7 +75,7 @@ func New(address, usercode string, h Handler) (*Satel, error) {
 
 	err = validateUsercode(usercode)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("validating usercode: %w", err)
 	}
 
@@ -97,17 +97,17 @@ func newConfig(conn net.Conn, usercode string, h Handler) (*Satel, error) {
 
 	model, version, language, err := s.getSatelDeviceInfo()
 	if err != nil {
-		s.Close()
+		_ = s.Close()
 		return nil, fmt.Errorf("getting satel device info : %w", err)
 	}
 	if version[0] == '2' && model == INTEGRA256Plus {
-		s.Close()
+		_ = s.Close()
 		return nil, fmt.Errorf("satel device model %q not yet supported", model.String())
 	}
 
 	s.zoneOutputCapacity, err = model.ZoneAndOutputCapacity()
 	if err != nil {
-		s.Close()
+		_ = s.Close()
 		return nil, fmt.Errorf("getting zone and output capacity : %w", err)
 	}
 
@@ -335,7 +335,7 @@ func (s *Satel) Close() error {
 
 func (s *Satel) closeRead() {
 	close(s.responseChan)
-	s.conn.Close()
+	_ = s.conn.Close()
 	close(s.done)
 }
 
