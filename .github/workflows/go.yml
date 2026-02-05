@@ -6,19 +6,30 @@ on:
   pull_request:
     branches: [master]
 
+concurrency:
+  group: go-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
 
-      - name: Setup Golang with cache
-        uses: magnetikonline/action-golang-cache@v4
+      - name: Set up Go
+        uses: actions/setup-go@v6.2.0
         with:
           go-version-file: go.mod
+          cache: true
 
-      - name: Lint
-        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint run --timeout=180s
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.8.0
+          args: --timeout=180s
 
       - name: Build
         run: go build -v ./...
