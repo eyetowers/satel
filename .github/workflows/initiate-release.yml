@@ -1,0 +1,53 @@
+name: Initiate Release
+run-name: Initiate release ${{ github.event.inputs.release_type }} from ${{ github.ref_name }} by @${{ github.actor }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: "Release type (major, minor, patch)"
+        type: choice
+        required: true
+        default: "patch"
+        options:
+          - patch
+          - minor
+          - major
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write # Required to trigger workflow_dispatch.
+
+jobs:
+  tag:
+    name: Create Tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Get branch HEAD
+        id: branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - id: semver
+        uses: zwaldowski/semver-release-action@v6
+        with:
+          bump: ${{ github.event.inputs.release_type }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prefix: "v"
+          sha: ${{ steps.branch.outputs.commit }}
+          per_branch: true
+
+      - name: Trigger release workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run release.yml \
+            -f tag_name=${{ steps.semver.outputs.version_tag }} \
+            --ref ${{ github.ref_name }}
