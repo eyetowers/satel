@@ -102,6 +102,19 @@ func (myHandler) OnError(err error) {
 client, err := satel.New(addr, "0000", myHandler{})
 ```
 
+## Error & reconnect semantics
+
+This library does **not** auto-reconnect.
+
+- If a command times out, the client instance is considered invalid (session may be desynchronized).
+- After terminal transport/protocol errors (for example timeout/disconnect), create a **new** client instance.
+- Panel status errors (for example no access) are command-level failures and do not necessarily invalidate the client.
+
+Helpers:
+
+- `client.RequiresReconnect()` reports whether this client instance is no longer safe to use.
+- `satel.ShouldReconnect(err)` reports whether a returned error should trigger reconnect logic.
+
 ## Documentation
 
 - API: [pkg.go.dev/github.com/eyetowers/satel](https://pkg.go.dev/github.com/eyetowers/satel)

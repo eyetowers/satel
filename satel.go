@@ -56,6 +56,13 @@ func ShouldReconnect(err error) bool {
 	return errors.As(err, &netErr)
 }
 
+// RequiresReconnect reports whether this client instance is no longer safe to
+// use and the caller should create a new Satel instance.
+// Once true, it stays true for the lifetime of the client.
+func (s *Satel) RequiresReconnect() bool {
+	return s != nil && s.invalid.Load()
+}
+
 // KeepAliveInterval is how often the client pings the device to keep the TCP connection alive.
 // CmdTimeout is how long Send-style operations wait for a response before returning ErrTimeout.
 const (
