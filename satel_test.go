@@ -3,6 +3,8 @@ package satel
 import (
 	"bufio"
 	"bytes"
+	"fmt"
+	"net"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -276,6 +278,32 @@ func Test_TransformSubscription(t *testing.T) {
 			require.Equal(t, c.expect, result)
 		})
 	}
+}
+
+func TestShouldReconnect(t *testing.T) {
+	t.Run("terminal errors", func(t *testing.T) {
+		require.True(t, ShouldReconnect(ErrTimeout))
+		require.True(t, ShouldReconnect(ErrDisconnected))
+		require.True(t, ShouldReconnect(ErrNoConnection))
+		require.True(t, ShouldReconnect(ErrCrcNotMatch))
+		require.True(t, ShouldReconnect(ErrCorruptedResponse))
+		require.True(t, ShouldReconnect(fmt.Errorf("wrapped: %w", ErrProtocolViolation)))
+	})
+
+	t.Run("wrapped net.Error", func(t *testing.T) {
+		netErr := &net.DNSError{IsTimeout: true}
+		err := fmt.Errorf("read failed: %w", netErr)
+		require.True(t, ShouldReconnect(err))
+	})
+
+	t.Run("non-terminal status error", func(t *testing.T) {
+		err := fmt.Errorf("error response status received %q", NoAccess)
+		require.False(t, ShouldReconnect(err))
+	})
+
+	t.Run("nil", func(t *testing.T) {
+		require.False(t, ShouldReconnect(nil))
+	})
 }
 
 func Test_decodeSatelDeviceInfo(t *testing.T) {

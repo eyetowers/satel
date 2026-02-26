@@ -13,7 +13,7 @@ Go client library for the **Satel Integra** alarm system. It talks to an Integra
 
 ## Requirements
 
-- Go 1.21+
+- Go 1.25+
 - Integra panel with TCP access (direct or via ETHM-1/ETHM-2)
 
 ## Installation
