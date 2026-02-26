@@ -41,7 +41,7 @@ func findEnd(data []byte) int {
 		}
 		end := found + i
 		if end == 0 {
-			// Found at the begining, corrupt message.
+			// Found at the beginning, corrupt message.
 			return end + i
 		}
 		if data[end-1] != 0xFE {

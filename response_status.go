@@ -2,6 +2,8 @@ package satel
 
 import "fmt"
 
+// ResponseStatus is the status byte returned by the panel after a command.
+// Use IsError to check for failure; see ResponseStatusStrings for human-readable text.
 type ResponseStatus byte
 
 const (
@@ -20,6 +22,7 @@ const (
 	CommandAccepted           ResponseStatus = 0xFF
 )
 
+// ResponseStatusStrings maps status codes to human-readable messages.
 var ResponseStatusStrings = map[ResponseStatus]string{
 	Ok:                        "ok",
 	ReqUsercodeNotFound:       "requesting user code not found",
@@ -48,6 +51,7 @@ func (r ResponseStatus) String() string {
 	return ResponseStatusStrings[r]
 }
 
+// IsError reports whether the status indicates a command failure (e.g. bad usercode, no access).
 func (r ResponseStatus) IsError() bool {
 	return (r != Ok && r != CommandAccepted)
 }

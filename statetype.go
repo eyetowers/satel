@@ -1,5 +1,7 @@
 package satel
 
+// StateType identifies a kind of state (zone, partition, output, trouble, etc.)
+// used in Subscribe and in Handler callbacks.
 type StateType byte
 
 const (
@@ -44,6 +46,7 @@ const (
 	ZoneIsolate
 )
 
+// StateTypeStrings are the string names for each StateType (e.g. for logging).
 var StateTypeStrings = [...]string{
 	"zone-violation",
 	"zone-tamper",

@@ -1,5 +1,8 @@
 package satel
 
+// Handler receives real-time state updates and errors from the Satel client.
+// Implement this interface (or embed IgnoreHandler and override methods) to react
+// to zone/partition/output changes and connection errors.
 type Handler interface {
 	OnZoneViolations(index int, state, initial bool)
 	OnZoneTamper(index int, state, initial bool)
@@ -89,10 +92,9 @@ func handlerFunc(h Handler, cmd StateType) func(int, bool, bool) {
 	return functions[cmd]
 }
 
-// IgnoreHandler implements empty Handler functions. Use this to ignore the Handler functions.
-// Overwrite what you want to use.
-type IgnoreHandler struct {
-}
+// IgnoreHandler implements Handler with no-op methods. Embed it in your type and
+// override only the callbacks you need.
+type IgnoreHandler struct{}
 
 func (IgnoreHandler) OnZoneViolations(index int, state, initial bool)                {}
 func (IgnoreHandler) OnZoneTamper(index int, state, initial bool)                    {}
@@ -132,5 +134,7 @@ func (IgnoreHandler) OnTroubleMemoryPart4(index int, state, initial bool)       
 func (IgnoreHandler) OnTroubleMemoryPart5(index int, state, initial bool)            {}
 func (IgnoreHandler) OnPartitionWithViolatedZones(index int, state, initial bool)    {}
 func (IgnoreHandler) OnZoneIsolate(index int, state, initial bool)                   {}
+
+func (IgnoreHandler) OnError(err error) {}
 
 func (IgnoreHandler) OnTroublePart3(index int, troubleType Trouble3Type, trouble, initial bool) {}

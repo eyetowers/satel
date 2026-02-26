@@ -92,7 +92,6 @@ func Test_Scan_Pass(t *testing.T) {
 			for i := range result {
 				require.Equal(t, c.expect[i], result[i])
 			}
-
 		})
 	}
 }
@@ -134,7 +133,6 @@ func Test_Scan_Fail(t *testing.T) {
 
 			// Then.
 			require.Error(t, scanner.Err())
-
 		})
 	}
 }
@@ -278,4 +276,63 @@ func Test_TransformSubscription(t *testing.T) {
 			require.Equal(t, c.expect, result)
 		})
 	}
+}
+
+func Test_decodeSatelDeviceInfo(t *testing.T) {
+	// 14 bytes: model(1) + version(11) + language(1) + unused(1).
+	// Version segments (1+2+4+2+2) = "1" "." "00" " " "2020" "-" "01" "-" "01" -> "1.00 2020-01-01"
+	wellBehaved := []byte{
+		0x00, 0x31, 0x30, 0x30, 0x32, 0x30, 0x32, 0x30,
+		0x30, 0x31, 0x30, 0x31, 0x00, 0x00,
+	}
+	if len(wellBehaved) != 14 {
+		t.Fatalf("test data must be 14 bytes, got %d", len(wellBehaved))
+	}
+
+	t.Run("well-behaved printable version", func(t *testing.T) {
+		// Given.
+		input := wellBehaved
+
+		// When.
+		model, version, lang, err := decodeSatelDeviceInfo(input...)
+
+		// Then.
+		require.NoError(t, err)
+		require.Equal(t, device(0x00), model)
+		require.Contains(t, version, "1.00")
+		require.Contains(t, version, "2020")
+		require.Equal(t, language(0), lang)
+	})
+
+	t.Run("non-printable bytes become question mark", func(t *testing.T) {
+		// Given.
+		bad := make([]byte, 14)
+		copy(bad, wellBehaved)
+		bad[6] = 0x00 // non-printable in version segment
+		bad[9] = 0xFF
+
+		// When.
+		_, version, _, err := decodeSatelDeviceInfo(bad...)
+
+		// Then.
+		require.NoError(t, err)
+		require.Contains(t, version, "?")
+		for _, r := range version {
+			require.True(t, r >= 0x20 && r <= 0x7E || r == '?', "version should be printable ASCII or ?, got %q", version)
+		}
+	})
+
+	t.Run("wrong length returns error", func(t *testing.T) {
+		// Given.
+		shortPayload := wellBehaved[:13]
+		longPayload := append(wellBehaved, 0)
+
+		// When.
+		_, _, _, errShort := decodeSatelDeviceInfo(shortPayload...)
+		_, _, _, errLong := decodeSatelDeviceInfo(longPayload...)
+
+		// Then.
+		require.Error(t, errShort)
+		require.Error(t, errLong)
+	})
 }
