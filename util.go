@@ -11,8 +11,11 @@ import (
 	"golang.org/x/text/encoding/unicode"
 )
 
-var ErrInvalidChar = errors.New("usercode contains invalid character")
-var ErrInvalidLength = errors.New("usercode does not match the expected length")
+// Validation errors for usercode (e.g. from New).
+var (
+	ErrInvalidChar   = errors.New("usercode contains invalid character")
+	ErrInvalidLength = errors.New("usercode does not match the expected length")
+)
 
 const subscribeCmd = 0x7F
 
@@ -115,7 +118,7 @@ func decodeString(data []byte, language language) string {
 	return strings.TrimSpace(string(decodedData))
 }
 
-var languangeEncodings = map[language]encoding.Encoding{
+var languageEncodings = map[language]encoding.Encoding{
 	// Central european languages.
 	Czech:     charmap.Windows1250,
 	Slovakian: charmap.Windows1250,
@@ -130,19 +133,21 @@ var languangeEncodings = map[language]encoding.Encoding{
 }
 
 func transformReader(r io.Reader, l language) io.Reader {
-	enc, ok := languangeEncodings[l]
+	enc, ok := languageEncodings[l]
 	if !ok {
 		return unicode.UTF8.NewDecoder().Reader(r)
 	}
 	return enc.NewDecoder().Reader(r)
 }
 
-// toAscii returns bytes with all non standard ASCII characters replaced with '?'.
+// toAscii returns a copy of data with all non-printable ASCII characters replaced with '?'.
 func toAscii(data []byte) []byte {
 	result := make([]byte, len(data))
 	for i, b := range data {
 		if b < 0x20 || b > 0x7E {
-			data[i] = '?'
+			result[i] = '?'
+		} else {
+			result[i] = b
 		}
 	}
 	return result

@@ -1,5 +1,6 @@
 package satel
 
+// OutputFunction describes how an output is used (e.g. mono/bi switch).
 type OutputFunction byte
 
 const (

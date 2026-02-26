@@ -41,7 +41,7 @@ jobs:
           bump: ${{ github.event.inputs.release_type }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prefix: "v"
-          sha: ${{ steps.branch.outputs.commit }}
+          sha: ${{ github.sha }}
           per_branch: true
 
       - name: Trigger release workflow

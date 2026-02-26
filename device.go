@@ -58,7 +58,15 @@ func decodeSatelDeviceInfo(data ...byte) (device, string, language, error) {
 	}
 	model := device(data[0])
 	data = data[1:]
-	version := fmt.Sprintf("%s.%s %s-%s-%s", data[:1], data[1:3], data[3:7], data[7:9], data[9:11])
+	// Version is 11 bytes; sanitize so non-printable ASCII don't produce garbage in the string.
+	versionBytes := make([]byte, 11)
+	copy(versionBytes, data[0:11])
+	for i, b := range versionBytes {
+		if b < 0x20 || b > 0x7E {
+			versionBytes[i] = '?'
+		}
+	}
+	version := fmt.Sprintf("%s.%s %s-%s-%s", versionBytes[:1], versionBytes[1:3], versionBytes[3:7], versionBytes[7:9], versionBytes[9:11])
 	language := language(data[11])
 	return model, version, language, nil
 }
@@ -66,7 +74,7 @@ func decodeSatelDeviceInfo(data ...byte) (device, string, language, error) {
 func (d device) ZoneAndOutputCapacity() (uint64, error) {
 	value, exists := zoneAndOutputCapacity[d]
 	if !exists {
-		return 0, fmt.Errorf("unknown device, zone and output capacity could not be determained")
+		return 0, fmt.Errorf("unknown device, zone and output capacity could not be determined")
 	}
 
 	return value, nil
