@@ -302,6 +302,129 @@ func TestSendCmd_ChannelClosed_ReturnsDisconnected(t *testing.T) {
 	require.ErrorIs(t, err, ErrDisconnected)
 }
 
+func TestRequiresReconnect_TrueAfterTimeout(t *testing.T) {
+	// Given.
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer silentClose(listener)
+
+	deviceInfoPayload := []byte{
+		0x00, 0x31, 0x2E, 0x30, 0x30, 0x20, 0x32, 0x30,
+		0x32, 0x30, 0x2D, 0x30, 0x31, 0x00,
+	}
+
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer silentClose(conn)
+
+		scanner := bufio.NewScanner(conn)
+		scanner.Split(scan)
+
+		droppedOnce := false
+		for scanner.Scan() {
+			payload := scanner.Bytes()
+			cmd, _, err := decomposePayload(payload...)
+			if err != nil {
+				return
+			}
+			switch cmd {
+			case SatelDeviceInfoCmd:
+				_, _ = conn.Write(frame(append([]byte{SatelDeviceInfoCmd}, deviceInfoPayload...)...))
+			default:
+				// Drop first subscribe request to force timeout.
+				if cmd == subscribeCmd && !droppedOnce {
+					droppedOnce = true
+					continue
+				}
+				_, _ = conn.Write(frame(ResponseStatusCmd, byte(Ok)))
+			}
+		}
+	}()
+
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	require.NoError(t, err)
+	defer silentClose(conn)
+
+	s, err := NewWithConn(
+		conn,
+		"0000",
+		WithHandler(IgnoreHandler{}),
+		WithCmdTimeout(40*time.Millisecond),
+		WithKeepAliveInterval(time.Hour),
+	)
+	require.NoError(t, err)
+	defer silentClose(s)
+
+	// When.
+	err = s.Subscribe(ZoneViolation)
+
+	// Then.
+	require.ErrorIs(t, err, ErrTimeout)
+	require.True(t, s.RequiresReconnect())
+}
+
+func TestRequiresReconnect_FalseOnNonTerminalStatusError(t *testing.T) {
+	// Given.
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer silentClose(listener)
+
+	deviceInfoPayload := []byte{
+		0x00, 0x31, 0x2E, 0x30, 0x30, 0x20, 0x32, 0x30,
+		0x32, 0x30, 0x2D, 0x30, 0x31, 0x00,
+	}
+
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer silentClose(conn)
+
+		scanner := bufio.NewScanner(conn)
+		scanner.Split(scan)
+		for scanner.Scan() {
+			payload := scanner.Bytes()
+			cmd, _, err := decomposePayload(payload...)
+			if err != nil {
+				return
+			}
+			switch cmd {
+			case SatelDeviceInfoCmd:
+				_, _ = conn.Write(frame(append([]byte{SatelDeviceInfoCmd}, deviceInfoPayload...)...))
+			case subscribeCmd:
+				_, _ = conn.Write(frame(ResponseStatusCmd, byte(NoAccess)))
+			default:
+				_, _ = conn.Write(frame(ResponseStatusCmd, byte(Ok)))
+			}
+		}
+	}()
+
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	require.NoError(t, err)
+	defer silentClose(conn)
+
+	s, err := NewWithConn(
+		conn,
+		"0000",
+		WithHandler(IgnoreHandler{}),
+		WithCmdTimeout(200*time.Millisecond),
+		WithKeepAliveInterval(time.Hour),
+	)
+	require.NoError(t, err)
+	defer silentClose(s)
+
+	// When.
+	err = s.Subscribe(ZoneViolation)
+
+	// Then.
+	require.Error(t, err)
+	require.False(t, s.RequiresReconnect())
+}
+
 func errIsOrWraps(err, target error) bool {
 	return err != nil && errors.Is(err, target)
 }
