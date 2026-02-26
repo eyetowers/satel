@@ -187,10 +187,14 @@ func TestConcurrentCloseAndSendCmd(t *testing.T) {
 
 func TestReturnResponse_ReceiverStartsLate_NoDrop(t *testing.T) {
 	// Given.
+	waiterCh := make(chan Response, 1)
 	s := &Satel{
-		responseChan: make(chan Response, 1),
-		handler:      IgnoreHandler{},
+		handler: IgnoreHandler{},
 	}
+	s.setResponseWaiter(&responseWaiter{
+		expectedCmd: SatelDeviceVersion,
+		ch:          waiterCh,
+	})
 
 	done := make(chan struct{})
 
@@ -203,7 +207,7 @@ func TestReturnResponse_ReceiverStartsLate_NoDrop(t *testing.T) {
 
 	// Then.
 	select {
-	case resp := <-s.responseChan:
+	case resp := <-waiterCh:
 		require.Equal(t, ResponseStatusCmd, resp.cmd)
 		require.Equal(t, Ok, resp.status)
 	case <-time.After(100 * time.Millisecond):
@@ -221,16 +225,16 @@ func TestSendCmd_DiscardsStaleBufferedResponse(t *testing.T) {
 				wroteOnce.Do(func() { close(wrote) })
 			},
 		},
-		responseChan: make(chan Response, 1),
-		cmdTimeout:   100 * time.Millisecond,
+		handler:    IgnoreHandler{},
+		cmdTimeout: 100 * time.Millisecond,
 	}
-	// Simulate a late/stale response left from a previous timed-out request.
-	s.responseChan <- Response{cmd: ResponseStatusCmd, status: OtherError}
+	// Simulate a stale response when no waiter is active.
+	s.returnResponse(ResponseStatusCmd, byte(OtherError))
 
 	// Send the current response only after sendCmd has actually written the command.
 	go func() {
 		<-wrote
-		s.responseChan <- Response{cmd: ResponseStatusCmd, status: Ok}
+		s.returnResponse(ResponseStatusCmd, byte(Ok))
 	}()
 
 	// When.
@@ -239,46 +243,59 @@ func TestSendCmd_DiscardsStaleBufferedResponse(t *testing.T) {
 	// Then.
 	require.NoError(t, err)
 	require.Equal(t, ResponseStatusCmd, resp.cmd)
-	require.Equal(t, Ok, resp.status, "stale response should be drained before waiting for current response")
+	require.Equal(t, Ok, resp.status)
 }
 
 func TestSendCmd_SequentialImmediateResponsesSucceed(t *testing.T) {
 	// Given.
-	s := &Satel{
-		conn:         stubConn{},
-		responseChan: make(chan Response, 1),
-		cmdTimeout:   100 * time.Millisecond,
+	statuses := []ResponseStatus{Ok, CommandAccepted, Ok}
+	var idx int
+	var s *Satel
+	c := stubConn{
+		onWrite: func([]byte) {
+			// onWrite runs synchronously in stubConn.Write, so the response is
+			// queued before sendCmd starts waiting on waiter.ch.
+			if idx >= len(statuses) {
+				return
+			}
+			status := statuses[idx]
+			idx++
+			s.returnResponse(ResponseStatusCmd, byte(status))
+		},
+	}
+	s = &Satel{
+		conn:       c,
+		handler:    IgnoreHandler{},
+		cmdTimeout: 100 * time.Millisecond,
 	}
 
-	sendAndExpect := func(status ResponseStatus) {
+	sendAndExpect := func() {
 		// When.
-		go func() {
-			s.responseChan <- Response{cmd: ResponseStatusCmd, status: status}
-		}()
 		resp, err := s.sendCmd(SatelDeviceVersion)
 
 		// Then.
 		require.NoError(t, err)
 		require.Equal(t, ResponseStatusCmd, resp.cmd)
-		require.Equal(t, status, resp.status)
+		require.Equal(t, statuses[idx-1], resp.status)
 	}
 
 	// When.
-	sendAndExpect(Ok)
-	sendAndExpect(CommandAccepted)
-	sendAndExpect(Ok)
+	sendAndExpect()
+	sendAndExpect()
+	sendAndExpect()
 }
 
 func TestSendCmd_ChannelClosed_ReturnsDisconnected(t *testing.T) {
 	// Given.
+	done := make(chan bool)
+	close(done)
 	s := &Satel{
-		conn:         stubConn{},
-		responseChan: make(chan Response),
-		cmdTimeout:   100 * time.Millisecond,
+		conn:       stubConn{},
+		cmdTimeout: 100 * time.Millisecond,
+		done:       done,
 	}
 
 	// When.
-	close(s.responseChan)
 	_, err := s.sendCmd(SatelDeviceVersion)
 
 	// Then.

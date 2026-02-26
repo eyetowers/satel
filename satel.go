@@ -30,6 +30,32 @@ var (
 	ErrTimeout           = fmt.Errorf("timeout (%s), no response", CmdTimeout.String())
 )
 
+// ShouldReconnect reports whether err indicates the client session is no longer
+// safe to use and the caller should create a new Satel instance.
+// It also returns true for any net.Error (including temporary transport errors).
+// Callers can retry the same operation on a newly created client if needed.
+func ShouldReconnect(err error) bool {
+	if err == nil {
+		return false
+	}
+	terminal := []error{
+		ErrTimeout,
+		ErrDisconnected,
+		ErrNoConnection,
+		ErrCrcNotMatch,
+		ErrCorruptedResponse,
+		ErrProtocolViolation,
+	}
+	for _, target := range terminal {
+		if errors.Is(err, target) {
+			return true
+		}
+	}
+	// Transport-level failures are terminal for this session.
+	var netErr net.Error
+	return errors.As(err, &netErr)
+}
+
 // KeepAliveInterval is how often the client pings the device to keep the TCP connection alive.
 // CmdTimeout is how long Send-style operations wait for a response before returning ErrTimeout.
 const (
@@ -48,6 +74,7 @@ type Satel struct {
 	conn               net.Conn
 	usercode           []byte
 	mu                 sync.Mutex
+	waiterMu           sync.Mutex
 	cmdSize            int
 	zoneOutputCapacity uint64
 	deviceLanguage     language
@@ -55,10 +82,11 @@ type Satel struct {
 	keepAliveInterval time.Duration
 	cmdTimeout        time.Duration
 
-	responseChan chan Response
-	handler      Handler
-	closing      atomic.Bool
-	done         chan bool
+	responseWaiter *responseWaiter
+	handler        Handler
+	closing        atomic.Bool
+	invalid        atomic.Bool
+	done           chan bool
 
 	closeOnce sync.Once
 }
@@ -122,6 +150,11 @@ type Response struct {
 	status ResponseStatus
 }
 
+type responseWaiter struct {
+	expectedCmd byte
+	ch          chan Response
+}
+
 // Zone represents a single zone (sensor/detector) on the panel.
 type Zone struct {
 	ID        uint64
@@ -177,7 +210,6 @@ func newConfig(conn net.Conn, usercode string, opts ...Option) (*Satel, error) {
 		usercode:           transformCode(usercode),
 		keepAliveInterval:  o.keepAliveInterval,
 		cmdTimeout:         o.cmdTimeout,
-		responseChan:       make(chan Response, 1),
 		handler:            o.handler,
 		cmdSize:            16,
 		zoneOutputCapacity: 0,
@@ -209,14 +241,26 @@ func newConfig(conn net.Conn, usercode string, opts ...Option) (*Satel, error) {
 }
 
 func (s *Satel) keepConnectionAlive() {
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+
 	for {
+		select {
+		case <-s.done:
+			return
+		case <-timer.C:
+		}
+
 		// Sending this random command just to keep the connection alive.
 		_, err := s.sendCmd(SatelDeviceVersion)
 		if err != nil {
+			if s.closing.Load() || errors.Is(err, ErrDisconnected) {
+				return
+			}
 			s.reportError(fmt.Errorf("keeping connection alive: %w", err))
 			return
 		}
-		time.Sleep(s.keepAliveInterval)
+		timer.Reset(s.keepAliveInterval)
 	}
 }
 
@@ -420,7 +464,7 @@ func (s *Satel) ClearTroubleMemory() error {
 }
 
 func (s *Satel) prepareCommand(cmd byte, cmdSize int, index int) []byte {
-	// Substracting 1 from index since Satel indexes from 0.
+	// Subtracting 1 from index since Satel indexes from 0.
 	index = index - 1
 	data := make([]byte, cmdSize)
 	data[index/8] = 1 << (index % 8)
@@ -445,13 +489,13 @@ func (s *Satel) Close() error {
 }
 
 func (s *Satel) closeRead() {
-	close(s.responseChan)
+	s.invalid.Store(true)
 	_ = s.conn.Close()
 	close(s.done)
 }
 
 func (s *Satel) reportError(err error) {
-	if !s.closing.Load() {
+	if !s.closing.Load() && s.handler != nil {
 		s.handler.OnError(err)
 	}
 }
@@ -546,19 +590,20 @@ func (s *Satel) returnResponse(cmd byte, data ...byte) {
 		resp.data = bytes.Clone(data)
 	}
 
+	waiter := s.getResponseWaiter()
+	if waiter == nil {
+		s.reportError(ErrReturnResponse)
+		return
+	}
+	if !isExpectedResponse(waiter.expectedCmd, resp.cmd) {
+		s.reportError(fmt.Errorf("ignoring mismatched response: got 0x%02X for request 0x%02X", resp.cmd, waiter.expectedCmd))
+		return
+	}
+
 	select {
-	case s.responseChan <- resp:
+	case waiter.ch <- resp:
 	default:
-		// Channel full means a stale response is still pending; drop it and keep the latest.
-		select {
-		case <-s.responseChan:
-		default:
-		}
-		select {
-		case s.responseChan <- resp:
-		default:
-			s.reportError(ErrReturnResponse)
-		}
+		s.reportError(ErrReturnResponse)
 	}
 }
 
@@ -566,28 +611,74 @@ func (s *Satel) sendCmd(data ...byte) (*Response, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Drop stale response that may have arrived after a previous timeout.
+	if s.invalid.Load() {
+		return nil, ErrDisconnected
+	}
+
 	select {
-	case <-s.responseChan:
+	case <-s.done:
+		s.invalid.Store(true)
+		return nil, ErrDisconnected
 	default:
 	}
 
 	if s.conn == nil {
 		return nil, ErrNoConnection
 	}
+
+	waiter := &responseWaiter{
+		expectedCmd: data[0],
+		ch:          make(chan Response, 1),
+	}
+	s.setResponseWaiter(waiter)
+	defer s.clearResponseWaiter(waiter.ch)
+
 	_, err := s.conn.Write(frame(data...))
 	if err != nil {
 		return nil, fmt.Errorf("sending command : %w", err)
 	}
 
-	select {
-	case resp, ok := <-s.responseChan:
-		if !ok {
+	timer := time.NewTimer(s.cmdTimeout)
+	defer timer.Stop()
+
+	for {
+		select {
+		case resp := <-waiter.ch:
+			return &resp, nil
+		case <-s.done:
+			s.invalid.Store(true)
 			return nil, ErrDisconnected
+		case <-timer.C:
+			// Timeout means request/response stream is desynchronized. Invalidate
+			// this client instance and force callers to build a new one.
+			s.invalid.Store(true)
+			_ = s.conn.Close()
+			return nil, ErrTimeout
 		}
-		return &resp, nil
-	case <-time.After(s.cmdTimeout):
-		return nil, ErrTimeout
+	}
+}
+
+func isExpectedResponse(requestCmd, responseCmd byte) bool {
+	return responseCmd == ResponseStatusCmd || responseCmd == requestCmd
+}
+
+func (s *Satel) setResponseWaiter(w *responseWaiter) {
+	s.waiterMu.Lock()
+	defer s.waiterMu.Unlock()
+	s.responseWaiter = w
+}
+
+func (s *Satel) getResponseWaiter() *responseWaiter {
+	s.waiterMu.Lock()
+	defer s.waiterMu.Unlock()
+	return s.responseWaiter
+}
+
+func (s *Satel) clearResponseWaiter(ch chan Response) {
+	s.waiterMu.Lock()
+	defer s.waiterMu.Unlock()
+	if s.responseWaiter != nil && s.responseWaiter.ch == ch {
+		s.responseWaiter = nil
 	}
 }
 
