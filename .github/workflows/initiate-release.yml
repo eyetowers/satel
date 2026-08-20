@@ -31,7 +31,7 @@ jobs:
     steps:
       - name: Get branch HEAD
         id: branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
